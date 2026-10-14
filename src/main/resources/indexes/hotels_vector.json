@@ -1,0 +1,13 @@
+{
+  "fields": [
+    { "type": "autoEmbed", "modality": "text", "path": "profile", "model": "${EMBED_MODEL}" },
+    { "type": "filter", "path": "_id" },
+    { "type": "filter", "path": "city" },
+    { "type": "filter", "path": "type" },
+    { "type": "filter", "path": "pricePerNight" },
+    { "type": "filter", "path": "stars" },
+    { "type": "filter", "path": "amenities" },
+    { "type": "filter", "path": "tags" },
+    { "type": "filter", "path": "setting" }
+  ]
+}

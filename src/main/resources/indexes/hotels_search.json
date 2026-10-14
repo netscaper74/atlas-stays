@@ -1,0 +1,34 @@
+{
+  "analyzer": "lucene.standard",
+  "searchAnalyzer": "lucene.standard",
+  "analyzers": [
+    {
+      "name": "folding",
+      "tokenizer": { "type": "standard" },
+      "tokenFilters": [ { "type": "icuFolding" } ]
+    }
+  ],
+  "mappings": {
+    "dynamic": false,
+    "fields": {
+      "name": [
+        { "type": "string", "analyzer": "folding" },
+        { "type": "autocomplete", "analyzer": "lucene.standard", "tokenization": "edgeGram", "minGrams": 2, "maxGrams": 15, "foldDiacritics": true }
+      ],
+      "type":      [ { "type": "string", "analyzer": "folding" }, { "type": "token" } ],
+      "city":      [ { "type": "string", "analyzer": "folding" }, { "type": "token" } ],
+      "district":  [ { "type": "string", "analyzer": "folding" }, { "type": "token" } ],
+      "amenities": [ { "type": "string", "analyzer": "folding" }, { "type": "token" } ],
+      "tags":      [ { "type": "string", "analyzer": "folding" }, { "type": "token" } ],
+      "description": {
+        "type": "string",
+        "analyzer": "lucene.english",
+        "multi": { "tr": { "type": "string", "analyzer": "lucene.turkish" } }
+      },
+      "stars":         { "type": "number" },
+      "rating":        { "type": "number" },
+      "pricePerNight": { "type": "number" },
+      "location":      { "type": "geo" }
+    }
+  }
+}
