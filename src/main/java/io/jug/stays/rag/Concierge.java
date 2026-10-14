@@ -58,27 +58,7 @@ public final class Concierge {
      * previous answer stay in the context.
      */
     public List<Document> retrieve(String question, List<Document> history, Document filter, List<Document> debug) {
-        // ▶ LAB 4.1
-        String previousQuestion = null;
-        List<String> previousHotels = List.of();
-        for (int i = history.size() - 1; i >= 0; i--) {
-            Document m = history.get(i);
-            if (previousQuestion == null && "user".equals(m.getString("role"))) previousQuestion = m.getString("content");
-            if (previousHotels.isEmpty() && "assistant".equals(m.getString("role")) && m.getList("hotelIds", String.class) != null) {
-                previousHotels = m.getList("hotelIds", String.class);
-            }
-        }
-        String searchText = previousQuestion == null ? question : previousQuestion + " " + question;
-
-        Map<Object, Document> hotels = new LinkedHashMap<>();
-        for (Document h : semantic.retrieve(searchText, filter, TOP_K, debug)) hotels.put(h.get("_id"), h);
-        if (!previousHotels.isEmpty()) {
-            db.hotels().find(new Document("_id", new Document("$in", previousHotels)))
-                    .projection(new Document("profile", 0))
-                    .forEach(h -> hotels.putIfAbsent(h.get("_id"), h.append("_fromPreviousAnswer", true)));
-        }
-        return new ArrayList<>(hotels.values()).subList(0, Math.min(hotels.size(), 8));
-        // ◀ LAB 4.1
+        throw Lab.todo("4.1");
     }
 
     // LAB 4.2 ─────────────────────────────────────────────────────────────────────
@@ -87,16 +67,7 @@ public final class Concierge {
      * CONTEXT block listing the retrieved hotels. (The system prompt is {@link #SYSTEM}.)
      */
     public List<Llm.Message> buildMessages(String question, List<Document> hotels, List<Document> history) {
-        // ▶ LAB 4.2
-        List<Llm.Message> messages = new ArrayList<>();
-        for (Document m : history) messages.add(new Llm.Message(m.getString("role"), m.getString("content")));
-
-        StringBuilder context = new StringBuilder("CONTEXT (hotels retrieved from the database for this question):\n");
-        int i = 1;
-        for (Document h : hotels) context.append('[').append(i++).append("] ").append(describe(h)).append('\n');
-        messages.add(new Llm.Message("user", context + "\nQUESTION: " + question));
-        return messages;
-        // ◀ LAB 4.2
+        throw Lab.todo("4.2");
     }
 
     /** One hotel as a compact paragraph for the prompt. */

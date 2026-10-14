@@ -58,15 +58,7 @@ public final class SemanticSearch implements HotelSearch {
      * keeping the best {@code limit}. Keep it well above limit (10 to 20 times).
      */
     public Document vectorSearchStage(String q, Document filter, int limit) {
-        // ▶ LAB 3.2
-        Document stage = new Document("index", INDEX)
-                .append("path", "profile")
-                .append("query", new Document("text", q))
-                .append("numCandidates", Math.max(150, limit * 15))
-                .append("limit", limit);
-        if (filter != null && !filter.isEmpty()) stage.append("filter", filter);
-        return new Document("$vectorSearch", stage);
-        // ◀ LAB 3.2
+        throw Lab.todo("3.2");
     }
 
     // LAB 3.3 ─────────────────────────────────────────────────────────────────────
@@ -76,17 +68,7 @@ public final class SemanticSearch implements HotelSearch {
      * Returns an empty document when there is nothing to filter.
      */
     public Document vectorFilter(SearchRequest r) {
-        // ▶ LAB 3.3
-        List<Document> and = new ArrayList<>();
-        if (r.city() != null) and.add(new Document("city", r.city()));
-        if (r.type() != null) and.add(new Document("type", r.type()));
-        if (r.minPrice() != null) and.add(new Document("pricePerNight", new Document("$gte", r.minPrice())));
-        if (r.maxPrice() != null) and.add(new Document("pricePerNight", new Document("$lte", r.maxPrice())));
-        if (r.minStars() != null) and.add(new Document("stars", new Document("$gte", r.minStars())));
-        for (String a : r.amenities()) and.add(new Document("amenities", a));
-        if (and.isEmpty()) return new Document();
-        return and.size() == 1 ? and.get(0) : new Document("$and", and);
-        // ◀ LAB 3.3
+        throw Lab.todo("3.3");
     }
 
     // LAB 3.4 (stretch) ───────────────────────────────────────────────────────────
@@ -96,21 +78,7 @@ public final class SemanticSearch implements HotelSearch {
      * with reciprocal rank fusion. Needs MongoDB 8.1 or later.
      */
     public List<Document> hybridPipeline(SearchRequest r, int limit) {
-        // ▶ LAB 3.4
-        List<Document> vector = List.of(vectorSearchStage(r.q(), vectorFilter(r), limit * 2));
-        List<Document> keyword = List.of(
-                new Document("$search", new Document("index", Config.SEARCH_INDEX).append("compound", text.operator(r).get("compound"))),
-                new Document("$limit", limit * 2));
-        return List.of(
-                new Document("$rankFusion", new Document("input", new Document("pipelines",
-                        new Document("vector", vector).append("text", keyword)))
-                        .append("combination", new Document("weights", new Document("vector", 1).append("text", 1)))
-                        .append("scoreDetails", true)),
-                new Document("$limit", limit),
-                new Document("$addFields", new Document("_score", new Document("$meta", "score"))
-                        .append("_details", new Document("$meta", "scoreDetails"))),
-                new Document("$project", CARD_PROJECTION));
-        // ◀ LAB 3.4
+        throw Lab.todo("3.4");
     }
 
     // ───────────────────────────────────────────────────────────────── plumbing

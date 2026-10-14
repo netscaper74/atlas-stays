@@ -56,27 +56,7 @@ public final class AtlasTextSearch implements HotelSearch {
      * At least one clause has to match.
      */
     public Document textOperator(String q) {
-        // ▶ LAB 2.2
-        List<Document> should = new ArrayList<>();
-        // 1. Exact words in the short, important fields. The "folding" analyzer makes "kadikoy" match "Kadıköy".
-        should.add(text(q, STRONG, 6));
-        // 2. Amenities and tags: "pet" matches the word "Pet friendly", but not "petals".
-        should.add(text(q, MEDIUM, 3));
-        // 3. The description, in English (stemmed) and Turkish (multi-analyzer "tr").
-        should.add(new Document("text", new Document("query", q)
-                .append("path", List.of("description", new Document("value", "description").append("multi", "tr")))));
-        // 4. Prefix matches while the user is still typing.
-        should.add(new Document("autocomplete", new Document("query", q).append("path", "name")
-                .append("score", boost(2))));
-        // 5. Typos, one word at a time. Atlas applies one maxEdits to the whole query,
-        //    so per-word clauses stop short words from matching half the catalogue.
-        for (String word : new LinkedHashSet<>(Arrays.asList(q.toLowerCase().split("\\s+")))) {
-            if (word.length() < 3) continue;
-            should.add(new Document("text", new Document("query", word).append("path", FUZZY_PATHS)
-                    .append("fuzzy", new Document("maxEdits", word.length() >= 7 ? 2 : 1).append("prefixLength", 1).append("maxExpansions", 50))));
-        }
-        return new Document("compound", new Document("should", should).append("minimumShouldMatch", 1));
-        // ◀ LAB 2.2
+        throw Lab.todo("2.2");
     }
 
     // LAB 2.3 ─────────────────────────────────────────────────────────────────────
@@ -85,51 +65,19 @@ public final class AtlasTextSearch implements HotelSearch {
      * include or exclude documents but don't change the score.
      */
     public List<Document> filterClauses(SearchRequest r) {
-        // ▶ LAB 2.3
-        List<Document> filter = new ArrayList<>();
-        if (r.city() != null) filter.add(new Document("equals", new Document("path", "city").append("value", r.city())));
-        if (r.type() != null) filter.add(new Document("equals", new Document("path", "type").append("value", r.type())));
-        if (r.minPrice() != null || r.maxPrice() != null) {
-            Document range = new Document("path", "pricePerNight");
-            if (r.minPrice() != null) range.append("gte", r.minPrice());
-            if (r.maxPrice() != null) range.append("lte", r.maxPrice());
-            filter.add(new Document("range", range));
-        }
-        if (r.minStars() != null) filter.add(new Document("range", new Document("path", "stars").append("gte", r.minStars())));
-        for (String a : r.amenities()) filter.add(new Document("equals", new Document("path", "amenities").append("value", a)));
-        return filter;
-        // ◀ LAB 2.3
+        throw Lab.todo("2.3");
     }
 
     // LAB 2.4 ─────────────────────────────────────────────────────────────────────
     /** Facet definitions for $searchMeta: what to count, and how to bucket numbers. */
     public Document facetDefinitions() {
-        // ▶ LAB 2.4
-        return new Document()
-                .append("city", new Document("type", "string").append("path", "city").append("numBuckets", 30))
-                .append("type", new Document("type", "string").append("path", "type").append("numBuckets", 20))
-                .append("amenities", new Document("type", "string").append("path", "amenities").append("numBuckets", 40))
-                .append("stars", new Document("type", "number").append("path", "stars")
-                        .append("boundaries", List.of(1, 2, 3, 4, 5, 6)))
-                .append("price", new Document("type", "number").append("path", "pricePerNight")
-                        .append("boundaries", List.of(0, 50, 100, 150, 200, 300, 400, 600, 900, 1300))
-                        .append("default", "more"));
-        // ◀ LAB 2.4
+        throw Lab.todo("2.4");
     }
 
     // LAB 2.5 (stretch) ───────────────────────────────────────────────────────────
     /** Search-as-you-type suggestions for the header search box. */
     public List<Document> autocompletePipeline(String q) {
-        // ▶ LAB 2.5
-        return List.of(
-                new Document("$search", new Document("index", INDEX)
-                        .append("autocomplete", new Document("query", q).append("path", "name")
-                                .append("fuzzy", new Document("maxEdits", 1).append("prefixLength", 1)))),
-                new Document("$limit", 6),
-                new Document("$project", new Document("name", 1).append("district", 1).append("city", 1)
-                        .append("type", 1).append("pricePerNight", 1).append("art", 1).append("setting", 1)
-                        .append("score", new Document("$meta", "searchScore"))));
-        // ◀ LAB 2.5
+        throw Lab.todo("2.5");
     }
 
     // ───────────────────────────────────────────────────────────────── plumbing

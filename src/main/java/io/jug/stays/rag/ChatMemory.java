@@ -1,5 +1,7 @@
 package io.jug.stays.rag;
 
+import io.jug.stays.Lab;
+
 import io.jug.stays.Db;
 import org.bson.Document;
 
@@ -27,26 +29,12 @@ public final class ChatMemory {
     // LAB 4.3 ─────────────────────────────────────────────────────────────────────
     /** Store one message. {@code hotelIds} are the hotels an answer was based on (empty for user messages). */
     public void remember(String sessionId, String role, String content, List<String> hotelIds) {
-        // ▶ LAB 4.3
-        db.chat().insertOne(new Document("sessionId", sessionId)
-                .append("role", role)
-                .append("content", content)
-                .append("hotelIds", hotelIds)
-                .append("createdAt", new Date()));
-        // ◀ LAB 4.3
+        throw Lab.todo("4.3");
     }
 
     /** The last {@code lastN} messages of a session, oldest first. */
     public List<Document> recall(String sessionId, int lastN) {
-        // ▶ LAB 4.3
-        List<Document> latest = db.chat().find(new Document("sessionId", sessionId))
-                .sort(new Document("createdAt", -1))
-                .limit(lastN)
-                .projection(new Document("_id", 0))
-                .into(new ArrayList<>());
-        Collections.reverse(latest);
-        return latest;
-        // ◀ LAB 4.3
+        throw Lab.todo("4.3");
     }
 
     public long forget(String sessionId) {
