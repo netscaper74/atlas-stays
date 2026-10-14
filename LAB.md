@@ -2,7 +2,7 @@
 
 Four labs and about 2 hours of hands-on time. Each exercise is one small method marked `// LAB x.y` that currently does `throw Lab.todo("x.y")`. The app keeps running while exercises are open: the UI shows which one a feature is waiting for, and **Setup** (top right) lists them all.
 
-**After each change:** stop the app (`Ctrl+C`), run `mvn -q compile exec:java` again, and reload the page. `mvn test` checks every exercise without a database.
+**After each change:** with `docker compose watch` running, just save the file: the image rebuilds and the app restarts (usually under a minute); reload the page. With Maven, stop the app (`Ctrl+C`), run `mvn -q compile exec:java` again, and reload. `mvn test` checks every exercise without a database.
 
 **Stuck?** `git diff main solution -- <file>` shows the answer for one file. `git checkout solution -- <file>` takes it.
 
@@ -11,7 +11,7 @@ Four labs and about 2 hours of hands-on time. Each exercise is one small method 
 ## Lab 0 · Set up (10 min)
 
 1. `cp .env.example .env`, then paste your `MONGODB_URI` and set `ATTENDEE` to the name your instructor used (for example `ayse_yilmaz`).
-2. `mvn -q compile exec:java`, then open http://localhost:8080.
+2. `docker compose watch` (or `mvn -q compile exec:java`), then open http://localhost:8080. The first Docker build downloads Maven and the driver, so give it a couple of minutes.
 3. Wait for the status card to disappear. The app has loaded 255 hotels into **your** database, `stays_<ATTENDEE>`.
 4. **Create both search indexes now.** Open **Setup**, then click **Create index** on `hotels_search` and `hotels_vector`. They build in the background: the vector index has to embed every hotel, so starting it now means it is READY by Lab 3. You'll read both definitions later.
 5. Open the **Atlas** button (bottom right). Every query the page runs appears there.

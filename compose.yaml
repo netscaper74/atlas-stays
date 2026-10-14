@@ -1,0 +1,40 @@
+# Atlas Stays against your MongoDB Atlas database.
+#
+#   cp .env.example .env        # paste MONGODB_URI, set ATTENDEE
+#   docker compose up --build   # http://localhost:8080
+#   docker compose watch        # same, and rebuilds whenever you save a file in src/
+#
+# There is no local MongoDB here on purpose: everything runs on Atlas.
+name: atlas-stays
+
+services:
+  app:
+    build: .
+    image: atlas-stays:dev
+    ports:
+      - "${PORT:-8080}:8080"
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      PORT: "8080"          # inside the container; PORT in .env only changes the host port
+    restart: "no"
+    develop:
+      watch:
+        - action: rebuild
+          path: ./src
+        - action: rebuild
+          path: ./pom.xml
+
+  # Instructor dry run: prints the real query-ladder scorecard for all three versions.
+  #   docker compose run --rm ladder
+  ladder:
+    build:
+      context: .
+      target: build
+    profiles: ["dryrun"]
+    env_file:
+      - path: .env
+        required: true
+    working_dir: /src
+    command: ["mvn", "-B", "-q", "test", "-Dtest=AtlasIntegrationTest", "-Dsurefire.failIfNoSpecifiedTests=false"]

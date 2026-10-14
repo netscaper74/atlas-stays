@@ -1,0 +1,9 @@
+target/
+.git/
+.env
+envs/
+attendees.csv
+docs/
+.idea/
+.vscode/
+*.iml

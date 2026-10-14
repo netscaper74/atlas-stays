@@ -35,16 +35,17 @@ export LLM_BASE_URL=https://<workshop-proxy>/v1 LLM_API_KEY=<key> LLM_MODEL=gpt-
 
 Hand each attendee their `envs/<slug>.env` (it becomes their `.env`).
 
-**Optional: pre-build everything the night before.** For each attendee, `java -jar target/atlas-stays.jar` with their env and `AUTO_CREATE_INDEXES=true` seeds the data and creates both indexes. Attendees then still read and explain the definitions in Labs 2.1 and 3.1, but nobody waits on index builds.
+**Optional: pre-build everything the night before.** For each attendee, run the solution once with their env file and `AUTO_CREATE_INDEXES=true`, for example `cp envs/<slug>.env .env && echo AUTO_CREATE_INDEXES=true >> .env && docker compose up --build`. That seeds the data and creates both indexes. Attendees then still read and explain the definitions in Labs 2.1 and 3.1, but nobody waits on index builds.
 
 ## Dry run checklist
 
-- [ ] `mvn -q compile exec:java` on the **solution** branch with one attendee's `.env`: status card clears, Setup shows both indexes READY.
-- [ ] `mvn test -Dtest=AtlasIntegrationTest` prints the real ladder scorecard. Put that table on your wrap-up slide; it's computed from real results, so check it before claiming any column wins.
+- [ ] `docker compose up --build` on the **solution** branch with one attendee's `.env`: status card clears, Setup shows both indexes READY.
+- [ ] `docker compose run --rm ladder` (or `mvn test -Dtest=AtlasIntegrationTest`) prints the real ladder scorecard. Put that table on your wrap-up slide; it's computed from real results, so check it before claiming any column wins.
 - [ ] Concierge: the three AI chips in order; the third ("What did I just ask you?") must answer correctly with memory on.
 - [ ] Hybrid toggle on v3 works (or shows the 8.0 fallback note).
 - [ ] On the **main** (starter) branch: the app starts, v1 shows the Lab 1.1 card, and `mvn test` fails only with "LAB x.y is not implemented yet".
-- [ ] Wi-Fi plan: attendees need Maven Central once. Ask them to run `mvn -q dependency:go-offline` before the event.
+- [ ] Wi-Fi plan: the first build pulls two images (`maven:3.9.9-eclipse-temurin-21`, `eclipse-temurin:21-jre`) and the Maven dependencies. Ask attendees to clone the repo and run `docker compose build` (or `mvn -q dependency:go-offline`) **before** the event.
+- [ ] With `docker compose watch`, saving a Java file rebuilds the image. Time it on a typical laptop; if it's slow, Maven users iterate faster.
 
 ## LLM
 

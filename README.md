@@ -15,20 +15,34 @@ All three implement one Java interface (`HotelSearch`) and receive the same requ
 
 ## Quick start (attendees)
 
-You need **JDK 21+**, **Maven 3.9+**, and the Atlas connection string your instructor gave you.
+You need the Atlas connection string your instructor gave you, and **either** Docker **or** JDK 21+ with Maven 3.9+.
 
 ```bash
 git clone <repo-url> atlas-stays && cd atlas-stays      # the main branch is the starter
 cp .env.example .env                                     # paste MONGODB_URI, set ATTENDEE
-mvn -q compile exec:java
 ```
 
-Open **http://localhost:8080**. The app loads 255 hotels into your own database (`stays_<ATTENDEE>`) on first start. Then follow **[LAB.md](LAB.md)**.
+**With Docker** (nothing else to install):
+
+```bash
+docker compose up --build        # http://localhost:8080
+docker compose watch             # same, and rebuilds the app every time you save a file in src/
+```
+
+**With Maven:**
+
+```bash
+mvn -q compile exec:java         # http://localhost:8080
+```
+
+On first start the app loads 255 hotels into your own database (`stays_<ATTENDEE>`). Then follow **[LAB.md](LAB.md)**.
 
 ```bash
 mvn test                      # which exercises are done? (no database needed)
 git diff main solution -- src/main/java     # stuck? the full solution lives on the solution branch
 ```
+
+There is no local MongoDB in the compose file on purpose: every version, including automated embedding, runs on Atlas.
 
 ## What's in the box
 
@@ -59,6 +73,8 @@ tools/
   make_starter.py           turns the solution into the starter
 scripts/
   provision.sh / cleanup.sh one database user and database per attendee (Atlas CLI)
+Dockerfile                  Maven build stage, then a JRE image with the fat jar
+compose.yaml                the app (+ a "dryrun" profile that prints the real ladder scorecard)
 ```
 
 The only runtime dependency is the MongoDB Java driver. Queries are built as plain `Document`s that look exactly like the JSON in the Atlas docs, and the **Atlas Inspector** (bottom right in the UI) shows every pipeline the page just ran.
@@ -73,7 +89,7 @@ The only runtime dependency is the MongoDB Java driver. Queries are built as pla
 | `EMBED_MODEL` | `voyage-4` | Model in the automated-embedding index (`voyage-4-lite`, `voyage-4`, `voyage-4-large`) |
 | `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` | OpenAI, `gpt-4.1-mini` | Any OpenAI-compatible endpoint, including a workshop proxy |
 | `ANTHROPIC_API_KEY` | | Use Claude instead (`LLM_PROVIDER=anthropic`) |
-| `PORT` | `8080` | |
+| `PORT` | `8080` | With Docker, the port on your machine |
 | `RESEED` | `false` | Drop and reload the hotels |
 | `AUTO_CREATE_INDEXES` | `false` | Create both search indexes at startup (instructor demo) |
 
