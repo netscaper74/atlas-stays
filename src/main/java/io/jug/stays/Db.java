@@ -32,6 +32,12 @@ public final class Db {
         this.database = client.getDatabase(config.database);
     }
 
+    /** A Db over a given database, without a client of its own. Used to record queries (see {@link Samples}). */
+    public Db(MongoDatabase database) {
+        this.client = null;
+        this.database = database;
+    }
+
     public MongoCollection<Document> hotels() {
         return database.getCollection(Config.HOTELS);
     }

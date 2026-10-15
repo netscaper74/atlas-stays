@@ -1,0 +1,324 @@
+{
+ "1.1": [
+  {
+   "file": "io/jug/stays/search/RegexSearch.java",
+   "header": [
+    "    /**",
+    "     * Turn the user's text into a filter: the text must appear, ignoring case,",
+    "     * in at least one of {@link #FIELDS}.",
+    "     *",
+    "     * Escape the input first. Otherwise a user typing \"(\" breaks the query, and a",
+    "     * user typing \"(a+)+$\" can make the server work very hard (ReDoS).",
+    "     */",
+    "    public Bson textFilter(String q) {"
+   ],
+   "indent": "        ",
+   "lines": [
+    "        Pattern pattern = Pattern.compile(escapeRegex(q.trim()), Pattern.CASE_INSENSITIVE);",
+    "        List<Bson> perField = new ArrayList<>();",
+    "        for (String field : FIELDS) {",
+    "            perField.add(Filters.regex(field, pattern));",
+    "        }",
+    "        return Filters.or(perField);"
+   ]
+  }
+ ],
+ "1.2": [
+  {
+   "file": "io/jug/stays/search/RegexSearch.java",
+   "header": [
+    "    /** The filters from the side panel, as plain MQL. Returns null when there are none. */",
+    "    public Bson structuredFilter(SearchRequest r) {"
+   ],
+   "indent": "        ",
+   "lines": [
+    "        List<Bson> and = new ArrayList<>();",
+    "        if (r.city() != null) and.add(Filters.eq(\"city\", r.city()));",
+    "        if (r.type() != null) and.add(Filters.eq(\"type\", r.type()));",
+    "        if (r.minPrice() != null) and.add(Filters.gte(\"pricePerNight\", r.minPrice()));",
+    "        if (r.maxPrice() != null) and.add(Filters.lte(\"pricePerNight\", r.maxPrice()));",
+    "        if (r.minStars() != null) and.add(Filters.gte(\"stars\", r.minStars()));",
+    "        if (!r.amenities().isEmpty()) and.add(Filters.all(\"amenities\", r.amenities()));",
+    "        return and.isEmpty() ? null : Filters.and(and);"
+   ]
+  }
+ ],
+ "2.2": [
+  {
+   "file": "io/jug/stays/search/AtlasTextSearch.java",
+   "header": [
+    "    /**",
+    "     * The text part of the query, as a compound operator.",
+    "     *",
+    "     * Several \"should\" clauses, each with its own boost, so an exact hit in the",
+    "     * hotel name beats a hit somewhere in the description, which beats a typo match.",
+    "     * At least one clause has to match.",
+    "     */",
+    "    public Document textOperator(String q) {"
+   ],
+   "indent": "        ",
+   "lines": [
+    "        List<Document> should = new ArrayList<>();",
+    "        // 1. Exact words in the short, important fields. The \"folding\" analyzer makes \"kadikoy\" match \"Kadıköy\".",
+    "        should.add(text(q, STRONG, 6));",
+    "        // 2. Amenities and tags: \"pet\" matches the word \"Pet friendly\", but not \"petals\".",
+    "        should.add(text(q, MEDIUM, 3));",
+    "        // 3. The description, in English (stemmed) and Turkish (multi-analyzer \"tr\").",
+    "        should.add(new Document(\"text\", new Document(\"query\", q)",
+    "                .append(\"path\", List.of(\"description\", new Document(\"value\", \"description\").append(\"multi\", \"tr\")))));",
+    "        // 4. Prefix matches while the user is still typing.",
+    "        should.add(new Document(\"autocomplete\", new Document(\"query\", q).append(\"path\", \"name\")",
+    "                .append(\"score\", boost(2))));",
+    "        // 5. Typos, one word at a time. Atlas applies one maxEdits to the whole query,",
+    "        //    so per-word clauses stop short words from matching half the catalogue.",
+    "        for (String word : new LinkedHashSet<>(Arrays.asList(q.toLowerCase().split(\"\\\\s+\")))) {",
+    "            if (word.length() < 3) continue;",
+    "            should.add(new Document(\"text\", new Document(\"query\", word).append(\"path\", FUZZY_PATHS)",
+    "                    .append(\"fuzzy\", new Document(\"maxEdits\", word.length() >= 7 ? 2 : 1).append(\"prefixLength\", 1).append(\"maxExpansions\", 50))));",
+    "        }",
+    "        return new Document(\"compound\", new Document(\"should\", should).append(\"minimumShouldMatch\", 1));"
+   ]
+  }
+ ],
+ "2.3": [
+  {
+   "file": "io/jug/stays/search/AtlasTextSearch.java",
+   "header": [
+    "    /**",
+    "     * Side-panel filters as search clauses. They go in compound.filter: they",
+    "     * include or exclude documents but don't change the score.",
+    "     */",
+    "    public List<Document> filterClauses(SearchRequest r) {"
+   ],
+   "indent": "        ",
+   "lines": [
+    "        List<Document> filter = new ArrayList<>();",
+    "        if (r.city() != null) filter.add(new Document(\"equals\", new Document(\"path\", \"city\").append(\"value\", r.city())));",
+    "        if (r.type() != null) filter.add(new Document(\"equals\", new Document(\"path\", \"type\").append(\"value\", r.type())));",
+    "        if (r.minPrice() != null || r.maxPrice() != null) {",
+    "            Document range = new Document(\"path\", \"pricePerNight\");",
+    "            if (r.minPrice() != null) range.append(\"gte\", r.minPrice());",
+    "            if (r.maxPrice() != null) range.append(\"lte\", r.maxPrice());",
+    "            filter.add(new Document(\"range\", range));",
+    "        }",
+    "        if (r.minStars() != null) filter.add(new Document(\"range\", new Document(\"path\", \"stars\").append(\"gte\", r.minStars())));",
+    "        for (String a : r.amenities()) filter.add(new Document(\"equals\", new Document(\"path\", \"amenities\").append(\"value\", a)));",
+    "        return filter;"
+   ]
+  }
+ ],
+ "2.4": [
+  {
+   "file": "io/jug/stays/search/AtlasTextSearch.java",
+   "header": [
+    "    /** Facet definitions for $searchMeta: what to count, and how to bucket numbers. */",
+    "    public Document facetDefinitions() {"
+   ],
+   "indent": "        ",
+   "lines": [
+    "        return new Document()",
+    "                .append(\"city\", new Document(\"type\", \"string\").append(\"path\", \"city\").append(\"numBuckets\", 30))",
+    "                .append(\"type\", new Document(\"type\", \"string\").append(\"path\", \"type\").append(\"numBuckets\", 20))",
+    "                .append(\"amenities\", new Document(\"type\", \"string\").append(\"path\", \"amenities\").append(\"numBuckets\", 40))",
+    "                .append(\"stars\", new Document(\"type\", \"number\").append(\"path\", \"stars\")",
+    "                        .append(\"boundaries\", List.of(1, 2, 3, 4, 5, 6)))",
+    "                .append(\"price\", new Document(\"type\", \"number\").append(\"path\", \"pricePerNight\")",
+    "                        .append(\"boundaries\", List.of(0, 50, 100, 150, 200, 300, 400, 600, 900, 1300))",
+    "                        .append(\"default\", \"more\"));"
+   ]
+  }
+ ],
+ "2.5": [
+  {
+   "file": "io/jug/stays/search/AtlasTextSearch.java",
+   "header": [
+    "    /** Search-as-you-type suggestions for the header search box. */",
+    "    public List<Document> autocompletePipeline(String q) {"
+   ],
+   "indent": "        ",
+   "lines": [
+    "        return List.of(",
+    "                new Document(\"$search\", new Document(\"index\", INDEX)",
+    "                        .append(\"autocomplete\", new Document(\"query\", q).append(\"path\", \"name\")",
+    "                                .append(\"fuzzy\", new Document(\"maxEdits\", 1).append(\"prefixLength\", 1)))),",
+    "                new Document(\"$limit\", 6),",
+    "                new Document(\"$project\", new Document(\"name\", 1).append(\"district\", 1).append(\"city\", 1)",
+    "                        .append(\"type\", 1).append(\"pricePerNight\", 1).append(\"art\", 1).append(\"setting\", 1)",
+    "                        .append(\"score\", new Document(\"$meta\", \"searchScore\"))));"
+   ]
+  }
+ ],
+ "3.2": [
+  {
+   "file": "io/jug/stays/search/SemanticSearch.java",
+   "header": [
+    "    /**",
+    "     * The $vectorSearch stage. No queryVector: with Automated Embedding you send",
+    "     * the text and Atlas turns it into a vector with the model from the index.",
+    "     *",
+    "     * numCandidates is how many nearest neighbours the ANN search looks at before",
+    "     * keeping the best {@code limit}. Keep it well above limit (10 to 20 times).",
+    "     */",
+    "    public Document vectorSearchStage(String q, Document filter, int limit) {"
+   ],
+   "indent": "        ",
+   "lines": [
+    "        Document stage = new Document(\"index\", INDEX)",
+    "                .append(\"path\", \"profile\")",
+    "                .append(\"query\", new Document(\"text\", q))",
+    "                .append(\"numCandidates\", Math.max(150, limit * 15))",
+    "                .append(\"limit\", limit);",
+    "        if (filter != null && !filter.isEmpty()) stage.append(\"filter\", filter);",
+    "        return new Document(\"$vectorSearch\", stage);"
+   ]
+  }
+ ],
+ "3.3": [
+  {
+   "file": "io/jug/stays/search/SemanticSearch.java",
+   "header": [
+    "    /**",
+    "     * Pre-filter: MQL that runs inside the vector search, before the nearest",
+    "     * neighbours are picked. Every field used here must be indexed as type \"filter\".",
+    "     * Returns an empty document when there is nothing to filter.",
+    "     */",
+    "    public Document vectorFilter(SearchRequest r) {"
+   ],
+   "indent": "        ",
+   "lines": [
+    "        List<Document> and = new ArrayList<>();",
+    "        if (r.city() != null) and.add(new Document(\"city\", r.city()));",
+    "        if (r.type() != null) and.add(new Document(\"type\", r.type()));",
+    "        if (r.minPrice() != null) and.add(new Document(\"pricePerNight\", new Document(\"$gte\", r.minPrice())));",
+    "        if (r.maxPrice() != null) and.add(new Document(\"pricePerNight\", new Document(\"$lte\", r.maxPrice())));",
+    "        if (r.minStars() != null) and.add(new Document(\"stars\", new Document(\"$gte\", r.minStars())));",
+    "        for (String a : r.amenities()) and.add(new Document(\"amenities\", a));",
+    "        if (and.isEmpty()) return new Document();",
+    "        return and.size() == 1 ? and.get(0) : new Document(\"$and\", and);"
+   ]
+  }
+ ],
+ "3.4": [
+  {
+   "file": "io/jug/stays/search/SemanticSearch.java",
+   "header": [
+    "    /**",
+    "     * Hybrid search: run the vector search (meaning) and the Atlas Search query",
+    "     * (exact words, names, typos) side by side and merge the two ranked lists",
+    "     * with reciprocal rank fusion. Needs MongoDB 8.1 or later.",
+    "     */",
+    "    public List<Document> hybridPipeline(SearchRequest r, int limit) {"
+   ],
+   "indent": "        ",
+   "lines": [
+    "        List<Document> vector = List.of(vectorSearchStage(r.q(), vectorFilter(r), limit * 2));",
+    "        List<Document> keyword = List.of(",
+    "                new Document(\"$search\", new Document(\"index\", Config.SEARCH_INDEX).append(\"compound\", text.operator(r).get(\"compound\"))),",
+    "                new Document(\"$limit\", limit * 2));",
+    "        return List.of(",
+    "                new Document(\"$rankFusion\", new Document(\"input\", new Document(\"pipelines\",",
+    "                        new Document(\"vector\", vector).append(\"text\", keyword)))",
+    "                        .append(\"combination\", new Document(\"weights\", new Document(\"vector\", 1).append(\"text\", 1)))",
+    "                        .append(\"scoreDetails\", true)),",
+    "                new Document(\"$limit\", limit),",
+    "                new Document(\"$addFields\", new Document(\"_score\", new Document(\"$meta\", \"score\"))",
+    "                        .append(\"_details\", new Document(\"$meta\", \"scoreDetails\"))),",
+    "                new Document(\"$project\", CARD_PROJECTION));"
+   ]
+  }
+ ],
+ "4.1": [
+  {
+   "file": "io/jug/stays/rag/Concierge.java",
+   "header": [
+    "    /**",
+    "     * Find the hotels to put in front of the model.",
+    "     *",
+    "     * Follow-up questions (\"which of those has a pool?\") mean little on their own,",
+    "     * so the previous question is added to the search text, and the hotels from the",
+    "     * previous answer stay in the context.",
+    "     */",
+    "    public List<Document> retrieve(String question, List<Document> history, Document filter, List<Document> debug) {"
+   ],
+   "indent": "        ",
+   "lines": [
+    "        String previousQuestion = null;",
+    "        List<String> previousHotels = List.of();",
+    "        for (int i = history.size() - 1; i >= 0; i--) {",
+    "            Document m = history.get(i);",
+    "            if (previousQuestion == null && \"user\".equals(m.getString(\"role\"))) previousQuestion = m.getString(\"content\");",
+    "            if (previousHotels.isEmpty() && \"assistant\".equals(m.getString(\"role\")) && m.getList(\"hotelIds\", String.class) != null) {",
+    "                previousHotels = m.getList(\"hotelIds\", String.class);",
+    "            }",
+    "        }",
+    "        String searchText = previousQuestion == null ? question : previousQuestion + \" \" + question;",
+    "",
+    "        Map<Object, Document> hotels = new LinkedHashMap<>();",
+    "        for (Document h : semantic.retrieve(searchText, filter, TOP_K, debug)) hotels.put(h.get(\"_id\"), h);",
+    "        if (!previousHotels.isEmpty()) {",
+    "            db.hotels().find(new Document(\"_id\", new Document(\"$in\", previousHotels)))",
+    "                    .projection(new Document(\"profile\", 0))",
+    "                    .forEach(h -> hotels.putIfAbsent(h.get(\"_id\"), h.append(\"_fromPreviousAnswer\", true)));",
+    "        }",
+    "        return new ArrayList<>(hotels.values()).subList(0, Math.min(hotels.size(), 8));"
+   ]
+  }
+ ],
+ "4.2": [
+  {
+   "file": "io/jug/stays/rag/Concierge.java",
+   "header": [
+    "    /**",
+    "     * The messages we send: the conversation so far, then the new question with a",
+    "     * CONTEXT block listing the retrieved hotels. (The system prompt is {@link #SYSTEM}.)",
+    "     */",
+    "    public List<Llm.Message> buildMessages(String question, List<Document> hotels, List<Document> history) {"
+   ],
+   "indent": "        ",
+   "lines": [
+    "        List<Llm.Message> messages = new ArrayList<>();",
+    "        for (Document m : history) messages.add(new Llm.Message(m.getString(\"role\"), m.getString(\"content\")));",
+    "",
+    "        StringBuilder context = new StringBuilder(\"CONTEXT (hotels retrieved from the database for this question):\\n\");",
+    "        int i = 1;",
+    "        for (Document h : hotels) context.append('[').append(i++).append(\"] \").append(describe(h)).append('\\n');",
+    "        messages.add(new Llm.Message(\"user\", context + \"\\nQUESTION: \" + question));",
+    "        return messages;"
+   ]
+  }
+ ],
+ "4.3": [
+  {
+   "file": "io/jug/stays/rag/ChatMemory.java",
+   "header": [
+    "    /** Store one message. {@code hotelIds} are the hotels an answer was based on (empty for user messages). */",
+    "    public void remember(String sessionId, String role, String content, List<String> hotelIds) {"
+   ],
+   "indent": "        ",
+   "lines": [
+    "        db.chat().insertOne(new Document(\"sessionId\", sessionId)",
+    "                .append(\"role\", role)",
+    "                .append(\"content\", content)",
+    "                .append(\"hotelIds\", hotelIds)",
+    "                .append(\"createdAt\", new Date()));"
+   ]
+  },
+  {
+   "file": "io/jug/stays/rag/ChatMemory.java",
+   "header": [
+    "    /** The last {@code lastN} messages of a session, oldest first. */",
+    "    public List<Document> recall(String sessionId, int lastN) {"
+   ],
+   "indent": "        ",
+   "lines": [
+    "        List<Document> latest = db.chat().find(new Document(\"sessionId\", sessionId))",
+    "                .sort(new Document(\"createdAt\", -1))",
+    "                .limit(lastN)",
+    "                .projection(new Document(\"_id\", 0))",
+    "                .into(new ArrayList<>());",
+    "        Collections.reverse(latest);",
+    "        return latest;"
+   ]
+  }
+ ]
+}

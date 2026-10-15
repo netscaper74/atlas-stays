@@ -35,11 +35,11 @@ docker compose watch             # same, and rebuilds the app every time you sav
 mvn -q compile exec:java         # http://localhost:8080
 ```
 
-On first start the app loads 255 hotels into your own database (`stays_<ATTENDEE>`). Then follow **[LAB.md](LAB.md)**.
+On first start the app loads 255 hotels into your own database (`stays_<ATTENDEE>`). Then follow **[LAB.md](LAB.md)**. The **Setup** panel walks you through the exercises in order, one next step at a time, and can write the reference solution into your file when you're stuck.
 
 ```bash
 mvn test                      # which exercises are done? (no database needed)
-git diff main solution -- src/main/java     # stuck? the full solution lives on the solution branch
+git diff main solution -- src/main/java     # the full solution lives on the solution branch
 ```
 
 There is no local MongoDB in the compose file on purpose: every version, including automated embedding, runs on Atlas.
@@ -92,6 +92,8 @@ The only runtime dependency is the MongoDB Java driver. Queries are built as pla
 | `PORT` | `8080` | With Docker, the port on your machine |
 | `RESEED` | `false` | Drop and reload the hotels |
 | `AUTO_CREATE_INDEXES` | `false` | Create both search indexes at startup (instructor demo) |
+| `LAB_SOLVER` | `true` | The Solve-it buttons in Setup. Set `false` on any public deployment |
+| `SOURCE_DIR` | `src/main/java` | Where Solve-it writes solutions (compose sets it to the mounted `./src`) |
 
 Without an LLM key the concierge still retrieves hotels and shows them, without writing an answer.
 

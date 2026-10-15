@@ -101,7 +101,7 @@ class LabTest {
     }
 
     @Test
-    @DisplayName("Lab 2.5 (stretch): autocomplete pipeline")
+    @DisplayName("Lab 2.5: autocomplete pipeline")
     void lab2_5() {
         List<Document> p = new AtlasTextSearch(null, null, null).autocompletePipeline("kad");
         Document search = p.get(0).get("$search", Document.class);
@@ -141,7 +141,7 @@ class LabTest {
     }
 
     @Test
-    @DisplayName("Lab 3.4 (stretch): $rankFusion of vector and text")
+    @DisplayName("Lab 3.4: $rankFusion of vector and text")
     void lab3_4() {
         List<Document> p = new SemanticSearch(null, null, new AtlasTextSearch(null, null, null)).hybridPipeline(SAMPLE, 5);
         Document rf = p.get(0).get("$rankFusion", Document.class);

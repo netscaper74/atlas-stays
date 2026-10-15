@@ -18,6 +18,13 @@ services:
         required: true
     environment:
       PORT: "8080"          # inside the container; PORT in .env only changes the host port
+      # "Solve it" buttons in Setup write the reference solution into your ./src,
+      # and watch (below) rebuilds the app. On Linux run: UID=$(id -u) docker compose watch
+      SOURCE_DIR: /workspace/src/main/java
+      STAYS_RUNTIME: docker
+    user: "${UID:-10001}"
+    volumes:
+      - ./src:/workspace/src
     restart: "no"
     develop:
       watch:

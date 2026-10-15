@@ -23,39 +23,39 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class Lab {
 
-    public record Exercise(String id, String version, String title, String where, String hint, boolean stretch) {}
+    public record Exercise(String id, String version, String title, String where, String hint) {}
 
     public static final Map<String, Exercise> EXERCISES = new LinkedHashMap<>();
 
     static {
         add("1.1", "v1", "Match the query with a regular expression", "RegexSearch.textFilter",
-                "Escape the user's input, then $or a case-insensitive $regex over name, type, district, city, description and amenities.", false);
+                "Escape the user's input, then $or a case-insensitive $regex over name, type, district, city, description and amenities.");
         add("1.2", "v1", "Add the structured filters", "RegexSearch.structuredFilter",
-                "city / type with $eq, pricePerNight with $gte/$lte, stars with $gte, amenities with $all.", false);
+                "city / type with $eq, pricePerNight with $gte/$lte, stars with $gte, amenities with $all.");
         add("2.2", "v2", "Write the Atlas Search text operator", "AtlasTextSearch.textOperator",
-                "compound.should: boosted text on name/district/city/type, then amenities/tags, then description; autocomplete on name; per-word fuzzy.", false);
+                "compound.should: boosted text on name/district/city/type, then amenities/tags, then description; autocomplete on name; per-word fuzzy.");
         add("2.3", "v2", "Turn the filters into search clauses", "AtlasTextSearch.filterClauses",
-                "equals for city/type/amenities, range for pricePerNight and stars. They go in compound.filter, so they don't change the score.", false);
+                "equals for city/type/amenities, range for pricePerNight and stars. They go in compound.filter, so they don't change the score.");
         add("2.4", "v2", "Define the facets", "AtlasTextSearch.facetDefinitions",
-                "string facets for city, type, amenities; number facets with boundaries for stars and pricePerNight.", false);
+                "string facets for city, type, amenities; number facets with boundaries for stars and pricePerNight.");
         add("2.5", "v2", "Search-as-you-type", "AtlasTextSearch.autocompletePipeline",
-                "$search with the autocomplete operator on name (fuzzy maxEdits 1), $limit 6, $project a few fields.", true);
+                "$search with the autocomplete operator on name (fuzzy maxEdits 1), $limit 6, $project a few fields.");
         add("3.2", "v3", "Write the $vectorSearch stage", "SemanticSearch.vectorSearchStage",
-                "index hotels_vector, path profile, query: { text: q }. Atlas embeds the text with Voyage AI for you.", false);
+                "index hotels_vector, path profile, query: { text: q }. Atlas embeds the text with Voyage AI for you.");
         add("3.3", "v3", "Pre-filter the vector search", "SemanticSearch.vectorFilter",
-                "An MQL filter on fields indexed as type 'filter': city, type, pricePerNight, stars, amenities.", false);
+                "An MQL filter on fields indexed as type 'filter': city, type, pricePerNight, stars, amenities.");
         add("3.4", "v3", "Hybrid search with $rankFusion", "SemanticSearch.hybridPipeline",
-                "$rankFusion with two input pipelines: your $vectorSearch and your $search. Reciprocal rank fusion merges them.", true);
+                "$rankFusion with two input pipelines: your $vectorSearch and your $search. Reciprocal rank fusion merges them.");
         add("4.1", "v3", "Retrieve the context", "Concierge.retrieve",
-                "Vector-search the question (plus the previous question for follow-ups) and keep the hotels from the last answer.", false);
+                "Vector-search the question (plus the previous question for follow-ups) and keep the hotels from the last answer.");
         add("4.2", "v3", "Build the prompt", "Concierge.buildMessages",
-                "System rules, then a CONTEXT block with the hotels, then the chat history, then the new question.", false);
+                "System rules, then a CONTEXT block with the hotels, then the chat history, then the new question.");
         add("4.3", "v3", "Give the concierge a memory", "ChatMemory.remember / ChatMemory.recall",
-                "insertOne each message with sessionId and createdAt; recall the last N for a session in chronological order.", false);
+                "insertOne each message with sessionId and createdAt; recall the last N for a session in chronological order.");
     }
 
-    private static void add(String id, String version, String title, String where, String hint, boolean stretch) {
-        EXERCISES.put(id, new Exercise(id, version, title, where, hint, stretch));
+    private static void add(String id, String version, String title, String where, String hint) {
+        EXERCISES.put(id, new Exercise(id, version, title, where, hint));
     }
 
     /** Thrown by an exercise that hasn't been written yet. */

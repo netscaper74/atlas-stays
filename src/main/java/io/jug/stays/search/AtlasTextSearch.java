@@ -56,7 +56,9 @@ public final class AtlasTextSearch implements HotelSearch {
      * At least one clause has to match.
      */
     public Document textOperator(String q) {
+        // ▶ LAB 2.2
         throw Lab.todo("2.2");
+        // ◀ LAB 2.2
     }
 
     // LAB 2.3 ─────────────────────────────────────────────────────────────────────
@@ -65,19 +67,25 @@ public final class AtlasTextSearch implements HotelSearch {
      * include or exclude documents but don't change the score.
      */
     public List<Document> filterClauses(SearchRequest r) {
+        // ▶ LAB 2.3
         throw Lab.todo("2.3");
+        // ◀ LAB 2.3
     }
 
     // LAB 2.4 ─────────────────────────────────────────────────────────────────────
     /** Facet definitions for $searchMeta: what to count, and how to bucket numbers. */
     public Document facetDefinitions() {
+        // ▶ LAB 2.4
         throw Lab.todo("2.4");
+        // ◀ LAB 2.4
     }
 
-    // LAB 2.5 (stretch) ───────────────────────────────────────────────────────────
+    // LAB 2.5 ───────────────────────────────────────────────────────────────────
     /** Search-as-you-type suggestions for the header search box. */
     public List<Document> autocompletePipeline(String q) {
+        // ▶ LAB 2.5
         throw Lab.todo("2.5");
+        // ◀ LAB 2.5
     }
 
     // ───────────────────────────────────────────────────────────────── plumbing

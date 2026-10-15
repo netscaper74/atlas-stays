@@ -54,6 +54,7 @@ public final class App {
     private final Concierge concierge;
     private final ChatMemory memory;
     private final Llm llm;
+    private final LabSolver solver;
     private final List<Route> routes = new ArrayList<>();
 
     App(Config config) {
@@ -68,6 +69,7 @@ public final class App {
         versions.put("v2", text);
         versions.put("v3", semantic);
         this.llm = new Llm(config);
+        this.solver = new LabSolver(config);
         this.memory = new ChatMemory(db);
         this.concierge = new Concierge(db, semantic, memory, llm);
         defineRoutes();
@@ -161,6 +163,14 @@ public final class App {
         route("DELETE", "/api/chat/([\\w-]+)", true, (ex, m, q) -> new Document("deleted", memory.forget(m.group(1))));
 
         get("/api/ladder", true, (ex, m, q) -> new Document("rungs", Ladder.run(versions, pool)));
+
+        // "Solve it for me": write the reference solution into the source file (or put the TODO back).
+        // Labs go in order: ?through=true first solves the earlier required exercises ("catch me up").
+        route("POST", "/api/labs/([\\d.]+)/solve", false, (ex, m, q) -> solver.solve(m.group(1), "true".equals(q.get("through"))));
+        route("POST", "/api/labs/([\\d.]+)/reset", false, (ex, m, q) -> solver.reset(m.group(1)));
+        route("POST", "/api/labs/reset-all", false, (ex, m, q) -> solver.resetAll());
+        get("/api/labs/([\\d.]+)/code", false, (ex, m, q) -> solver.code(m.group(1)));
+        get("/api/labs/([\\d.]+)/sample", false, (ex, m, q) -> Samples.forViewer(m.group(1)));
     }
 
     private Document runSafely(HotelSearch s, SearchRequest r) {
@@ -183,7 +193,9 @@ public final class App {
                 .append("cluster", config.clusterHost())
                 .append("llm", llm.label())
                 .append("embedModel", config.embedModel)
-                .append("labs", labs());
+                .append("labs", labs())
+                .append("solver", solver.available())
+                .append("codeViewer", solver.hasSolutions());
         if (bootstrap.ready) {
             Document idx = new Document();
             indexes.status().forEach(idx::append);
@@ -214,14 +226,17 @@ public final class App {
         for (Lab.Exercise e : Lab.all()) {
             Runnable p = probes.get(e.id());
             boolean done = p == null ? !Lab.seenTodo(e.id()) : Lab.probe(e.id(), p);
-            out.add(labDoc(e).append("done", done));
+            Document d = labDoc(e).append("done", done);
+            // "written" while not done means: the code is in the file, but this app was built before it
+            if (solver.available()) d.append("source", solver.sourceState(e.id()));
+            out.add(d);
         }
         return out;
     }
 
     static Document labDoc(Lab.Exercise e) {
         return new Document("id", e.id()).append("version", e.version()).append("title", e.title())
-                .append("where", e.where()).append("hint", e.hint()).append("stretch", e.stretch());
+                .append("where", e.where()).append("hint", e.hint());
     }
 
     // ─────────────────────────────────────────────────────────────── HTTP plumbing

@@ -125,10 +125,23 @@ async function pollStatus() {
   }
 }
 
+const doneKey = (st) => (st?.labs || []).filter((l) => l.done).map((l) => l.id).join(',');
+
 async function refreshStatus() {
   try {
-    S.status = await (await fetch('/api/status')).json();
+    const had = !!S.status?.labs;
+    const before = doneKey(S.status);
+    const st = await (await fetch('/api/status')).json();
+    if (!st.ready && st.phase !== 'error') return; // the app is restarting after a rebuild
+    S.status = st;
     renderStatusBits();
+    const after = doneKey(st);
+    if (had && after !== before) {
+      const added = after.split(',').filter((id) => id && !before.split(',').includes(id));
+      if (added.length) toast(`Lab ${added.join(', ')} is live`);
+      clearInterval(rebuildTimer);
+      load();
+    }
   } catch {}
 }
 
@@ -145,7 +158,7 @@ function renderStatusBits() {
   dot.className = `dot ${st.phase === 'error' ? 'err' : a.queryable && b.queryable ? 'ok' : 'warn'}`;
   // version cards
   for (const v of ['v1', 'v2', 'v3']) {
-    const labs = (st.labs || []).filter((l) => l.version === v && !l.stretch);
+    const labs = (st.labs || []).filter((l) => l.version === v);
     const done = labs.filter((l) => l.done).length;
     const chips = [`<span class="chip ${done === labs.length ? 'chip--ok' : 'chip--todo'}">Labs ${done}/${labs.length}</span>`];
     if (v === 'v1') chips.push('<span class="chip">No index needed</span>');
@@ -154,6 +167,8 @@ function renderStatusBits() {
     $(`#vstate-${v}`).innerHTML = chips.join('');
   }
   renderConciergeLock();
+  const req = st.labs || [];
+  $('#setupProgress').textContent = req.length ? `${req.filter(hasCode).length}/${req.length}` : '';
   if (!$('#setupDrawer').hidden) renderSetup();
   $('#footInfo').textContent = st.database ? `Database ${st.database} on ${st.cluster}` : '';
 }
@@ -286,7 +301,335 @@ function labCard(lab) {
   return `<div class="lab"><span class="lab__id">${esc(lab.id)}</span>
     <h3>Lab ${esc(lab.id)}: ${esc(lab.title)}</h3>
     <p>Open <code>${esc(lab.where)}</code> and replace the <code>throw Lab.todo("${esc(lab.id)}")</code>.</p>
-    <p>${esc(lab.hint)}</p></div>`;
+    <p>${esc(lab.hint)}</p><p class="lab__solve" data-lab="${esc(lab.id)}">${solveButton(lab.id)}</p>${S.status?.codeViewer ? `<p><button type="button" class="linkbtn" data-lab-code="${esc(lab.id)}">See the code before / after</button></p>` : ''}</div>`;
+}
+
+// ---- Guided labs: one step at a time, in order. "Solve it" writes the reference solution
+// into the source file (two clicks: arm, then confirm); the server enforces the order too.
+const armed = new Set();
+const hasCode = (l) => l.done || l.source === 'written';
+
+/** Each exercise with a state: done | pending (code written, app not rebuilt yet) | current | locked. */
+function labPlan() {
+  const labs = S.status?.labs || [];
+  let blocked = false;
+  const plan = labs.map((l) => {
+    const state = l.done ? 'done' : l.source === 'written' ? 'pending' : blocked ? 'locked' : 'current';
+    if (!hasCode(l)) blocked = true;
+    return { ...l, state };
+  });
+  const last = [...plan].reverse().find(hasCode);
+  if (last) last.undoable = true;
+  return plan;
+}
+
+function catchUpCount(plan, id) {
+  const i = plan.findIndex((l) => l.id === id);
+  return plan.slice(0, i + 1).filter((l) => !hasCode(l)).length;
+}
+
+/** The button on a "Lab x.y" card in the results. */
+function solveButton(id) {
+  const plan = labPlan();
+  const l = plan.find((x) => x.id === id);
+  if (!l || !S.status?.solver) return '';
+  if (l.state === 'pending') return '<span class="chip chip--wait">Waiting for the app to rebuild</span>';
+  if (l.state === 'locked') {
+    const cur = plan.find((x) => x.state === 'current');
+    return `<button type="button" class="btn btn--ghost btn--sm" data-open-setup>Lab ${esc(cur?.id || '')} comes first: open the lab steps</button>`;
+  }
+  const on = armed.has(`solve:${id}`);
+  return `<button type="button" class="btn btn--blue btn--sm" data-lab-solve="${esc(id)}">${on ? 'Click again to write the solution' : 'Solve it for me'}</button>`;
+}
+
+function labChip(l, plan) {
+  const solver = S.status?.solver;
+  if (l.state === 'done') {
+    if (!solver || !l.undoable) return '<span class="chip chip--ok">Done</span>';
+    const on = armed.has(`reset:${l.id}`);
+    return `<button type="button" class="chip chip--ok chip--btn ${on ? 'armed' : ''}" data-lab-reset="${esc(l.id)}" aria-label="Undo lab ${esc(l.id)}">${
+      on ? 'Put the to-do back? Click again' : '<span class="t1">Done</span><span class="t2">Undo</span>'
+    }</button>`;
+  }
+  if (l.state === 'pending') {
+    const undo = solver && l.undoable && armed.has(`reset:${l.id}`);
+    return solver && l.undoable
+      ? `<button type="button" class="chip chip--wait chip--btn ${undo ? 'armed' : ''}" data-lab-reset="${esc(l.id)}" title="The code is in your file. The app picks it up after a rebuild.">${undo ? 'Put the to-do back? Click again' : '<span class="t1">Rebuilding…</span><span class="t2">Undo</span>'}</button>`
+      : '<span class="chip chip--wait">Rebuilding…</span>';
+  }
+  if (l.state === 'locked') {
+    if (!solver) return '<span class="chip chip--lock">Locked</span>';
+    const n = catchUpCount(plan, l.id);
+    const on = armed.has(`through:${l.id}`);
+    return `<button type="button" class="chip chip--lock chip--btn ${on ? 'armed' : ''}" data-lab-through="${esc(l.id)}" title="Solve the ${n} steps up to here, in order">${
+      on ? `Solve ${n} steps? Click again` : '<span class="t1">Locked</span><span class="t2">Catch up to here</span>'
+    }</button>`;
+  }
+  const label = 'Next';
+  if (!solver) return `<span class="chip chip--todo">${label}</span>`;
+  const on = armed.has(`solve:${l.id}`);
+  return `<button type="button" class="chip chip--todo chip--btn ${on ? 'armed' : ''}" data-lab-solve="${esc(l.id)}" aria-label="Solve lab ${esc(l.id)} for me">${
+    on ? 'Write the solution? Click again' : `<span class="t1">${label}</span><span class="t2">Solve it</span>`
+  }</button>`;
+}
+
+const GROUPS = { v1: 'Lab 1 · Regex', v2: 'Lab 2 · Atlas Search', v3: 'Labs 3 and 4 · Vector Search and the concierge' };
+
+function nextStepCard(plan) {
+  const missing = ['hotels_search', 'hotels_vector'].filter((n) => !idx(n).exists);
+  const required = plan;
+  const doneN = required.filter(hasCode).length;
+  const progress = `<div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${required.length}" aria-valuenow="${doneN}"><i style="width:${(doneN / Math.max(1, required.length)) * 100}%"></i></div>`;
+  if (missing.length) {
+    return `<div class="next"><div class="next__top"><span class="next__id">0</span><div><small>Step 0 · before you code</small><h5>Create the search indexes</h5></div></div>
+      <p>They build in the background, and the vector index needs a few minutes to embed every hotel, so start them now. You'll read both definitions in Labs 2 and 3.</p>
+      <button class="btn btn--blue btn--sm" data-index-create-all="${missing.join(',')}">Create ${missing.length === 2 ? 'both indexes' : missing[0]}</button></div>${progress}`;
+  }
+  const cur = plan.find((l) => l.state === 'current');
+  if (!cur) {
+    const pending = plan.find((l) => l.state === 'pending');
+    if (pending) return `<div class="next next--wait"><div class="next__top"><span class="next__id">${esc(pending.id)}</span><div><small>Almost there</small><h5>Waiting for the app to rebuild</h5></div></div><p>The code is in your file. With docker compose watch the app restarts by itself; otherwise restart it.</p></div>${progress}`;
+    return `<div class="next next--done"><div class="next__top"><span class="next__id">✓</span><div><small>${doneN} of ${required.length} steps</small><h5>All labs done</h5></div></div><p>Run the query ladder and compare the three versions.</p><a class="btn btn--blue btn--sm" href="#scorecard" data-close="setup">Go to the scorecard</a></div>${progress}`;
+  }
+  const step = required.findIndex((l) => l.id === cur.id) + 1;
+  const on = armed.has(`solve:${cur.id}`);
+  return `<div class="next"><div class="next__top"><span class="next__id">${esc(cur.id)}</span><div><small>Step ${step} of ${required.length} · ${esc(GROUPS[cur.version])}</small><h5>${esc(cur.title)}</h5></div></div>
+    <p>Open <code>${esc(cur.where)}</code>. ${esc(cur.hint)}</p>
+    <div class="next__btns">${S.status?.solver ? `<button class="btn btn--blue btn--sm" data-lab-solve="${esc(cur.id)}">${on ? 'Click again to write the solution' : 'Solve it for me'}</button>` : ''}${S.status?.codeViewer ? `<button class="btn btn--ghost btn--sm" data-lab-code="${esc(cur.id)}">Before / after</button>` : ''}<span>or write it yourself, then rebuild</span></div>
+  </div>${progress}`;
+}
+
+/** Step 0 is always listed: create both search indexes (Labs 2 and 3 need them READY). */
+function step0Row() {
+  const names = ['hotels_search', 'hotels_vector'];
+  const st = names.map((n) => idx(n));
+  const missing = names.filter((n, i) => !st[i].exists);
+  const failed = st.some((i) => ['FAILED', 'UNAVAILABLE'].includes(i.status));
+  const detail = names.map((n, i) => `${n}: ${st[i].exists ? st[i].status : 'not created'}`).join(' · ');
+  let chip;
+  let state;
+  if (failed) {
+    state = 'current';
+    chip = '<span class="chip chip--err">Check below</span>';
+  } else if (missing.length) {
+    state = 'current';
+    chip = `<button type="button" class="chip chip--todo chip--btn" data-index-create-all="${missing.join(',')}" aria-label="Create the missing search indexes"><span class="t1">Start here</span><span class="t2">Create</span></button>`;
+  } else if (st.every((i) => i.queryable)) {
+    state = 'done';
+    chip = '<span class="chip chip--ok">Done</span>';
+  } else {
+    state = 'pending';
+    chip = '<span class="chip chip--wait" title="Building in the background. Lab 1 doesn\'t need them.">Building…</span>';
+  }
+  return `<div class="lgroup"><h5>Before you start</h5><ul class="labs"><li class="is-${state}"><b>0</b><div>Create the search indexes<small>${esc(detail)}</small></div>${chip}</li></ul></div>`;
+}
+
+function labsBlock() {
+  const plan = labPlan();
+  const groups = ['v1', 'v2', 'v3']
+    .map((v) => {
+      const ls = plan.filter((l) => l.version === v);
+      return `<div class="lgroup"><h5>${esc(GROUPS[v])}</h5><ul class="labs">${ls
+        .map(
+          (l) => `<li class="is-${l.state}"><b>${esc(l.id)}</b><div>${esc(l.title)}<small>${esc(l.where)}${S.status?.codeViewer ? ` · <button type="button" class="linkbtn" data-lab-code="${esc(l.id)}">before / after</button>` : ''}</small></div>${labChip(l, plan)}</li>`
+        )
+        .join('')}</ul></div>`;
+    })
+    .join('');
+  const anyCode = plan.some(hasCode);
+  const resetAll = S.status?.solver && anyCode
+    ? `<button class="f__clear" data-labs-reset-all>${armed.has('reset-all') ? 'Click again to put every to-do back' : 'Reset all labs'}</button>`
+    : '';
+  return `<div class="sblock"><div class="sblock__head"><h4>Lab steps</h4>${resetAll}</div>${nextStepCard(plan)}${step0Row()}${groups}</div>`;
+}
+
+
+// ---- Before / after: the method as the starter has it, next to the reference solution
+const JAVA_KW = new Set('abstract boolean break case catch class continue default do double else enum extends final finally float for if implements import instanceof int interface long new null package private protected public record return static super switch this throw throws true false try var void while yield'.split(' '));
+
+function hlJava(line) {
+  let out = '';
+  const re = /(\/\/.*$|\/\*.*?\*\/|^\s*\*.*$|^\s*\/\*\*.*$)|("(?:[^"\\]|\\.)*")|(\b\d+(?:\.\d+)?\b)|([A-Za-z_$][\w$]*)|(\s+|.)/g;
+  let m;
+  while ((m = re.exec(line))) {
+    if (m[1]) out += `<span class="c">${esc(m[1])}</span>`;
+    else if (m[2]) out += `<span class="s">${esc(m[2])}</span>`;
+    else if (m[3]) out += `<span class="n">${esc(m[3])}</span>`;
+    else if (m[4]) {
+      const w = m[4];
+      const next = line.slice(re.lastIndex).trimStart()[0];
+      out += JAVA_KW.has(w) ? `<span class="k">${w}</span>` : next === '(' ? `<span class="f">${esc(w)}</span>` : /^[A-Z]/.test(w) ? `<span class="t">${esc(w)}</span>` : esc(w);
+    } else out += esc(m[5]);
+  }
+  return out;
+}
+
+/** JSON with short objects and arrays kept on one line, so a query reads like it would in mongosh. */
+function fmtJson(v, pad = '') {
+  const flat = JSON.stringify(v, null, 1)?.replace(/\n\s*/g, ' ').replace(/([[{]) /g, '$1').replace(/ ([\]}])/g, '$1');
+  if (v === null || typeof v !== 'object' || flat.length + pad.length <= 62) return flat;
+  const inner = pad + '  ';
+  if (Array.isArray(v)) return `[\n${v.map((x) => inner + fmtJson(x, inner)).join(',\n')}\n${pad}]`;
+  return `{\n${Object.entries(v).map(([k, x]) => `${inner}${JSON.stringify(k)}: ${fmtJson(x, inner)}`).join(',\n')}\n${pad}}`;
+}
+
+function hlJson(text) {
+  return text.replace(/("(?:[^"\\]|\\.)*")(\s*:)?|(-?\b\d+(?:\.\d+)?\b)|\b(true|false|null)\b|([^"\d]+)/g, (all, str, colon, num, lit, rest) => {
+    if (str) return colon ? `<span class="${str.startsWith('"$') ? 'k' : 't'}">${esc(str)}</span>${colon}` : `<span class="s">${esc(str)}</span>`;
+    if (num) return `<span class="n">${num}</span>`;
+    if (lit) return `<span class="k">${lit}</span>`;
+    return esc(rest ?? all);
+  });
+}
+
+/** The "Generated query" panel: what the reference solution and the running app produce for one sample input. */
+function sampleBlock(smp, id, state) {
+  if (!smp || !smp.ok) return '';
+  const parse = (t) => {
+    try {
+      return JSON.parse(t);
+    } catch {
+      return t;
+    }
+  };
+  const ref = smp.reference ? fmtJson(parse(smp.reference)) : null;
+  const y = smp.yours || {};
+  const mine = y.output ? fmtJson(parse(y.output)) : null;
+  let left;
+  if (mine) {
+    const same = ref && mine === ref;
+    left = `<h4>Your running app <small>${same ? '<span class="chip chip--ok">Same as the reference</span>' : ref ? '<span class="chip chip--wait">Different from the reference</span>' : ''}</small></h4><pre class="code json">${hlJson(mine)}</pre>`;
+  } else {
+    const msg = y.todo === id
+      ? `Nothing yet: this step still throws <code>Lab.todo("${esc(id)}")</code>.${state === 'pending' ? ' The app is rebuilding with your change.' : ''}`
+      : y.todo
+        ? `This step calls Lab ${esc(y.todo)}, which is still a to-do.`
+        : `Your code threw an exception: <code>${esc(y.error || 'unknown error')}</code>`;
+    left = `<h4>Your running app</h4><div class="code json empty">${msg}</div>`;
+  }
+  return `<div class="cv__gen">
+    <div class="cv__file">Generated query · <span>${esc(smp.input)}</span></div>
+    <div class="cv__cols">
+      <section>${left}</section>
+      <section><h4>After <small>what the reference solution generates</small></h4>${ref ? `<pre class="code json">${hlJson(ref)}</pre>` : '<div class="code json empty">No reference sample in this build.</div>'}</section>
+    </div>
+  </div>`;
+}
+
+/** Lines with a role: ctx (method header), mark (LAB markers), add / del / mine (the exercise body). */
+function codeLines(lines, headerLines, role) {
+  let inside = false;
+  return lines.map((l, i) => {
+    let cls = i < headerLines ? 'ctx' : '';
+    if (/\/\/ ▶ LAB/.test(l)) {
+      inside = true;
+      cls = 'mark';
+    } else if (/\/\/ ◀ LAB/.test(l)) {
+      inside = false;
+      cls = 'mark';
+    } else if (inside) cls = role;
+    return `<div class="ln ${cls}"><i>${i + 1}</i><code>${hlJava(l) || ' '}</code></div>`;
+  });
+}
+
+const codeView = { id: null, mine: false };
+async function openCode(id, mine = false) {
+  const dlg = $('#codeModal');
+  codeView.id = id;
+  codeView.mine = mine;
+  if (!dlg.open) dlg.showModal();
+  dlg.innerHTML = '<div class="cv"><div class="cv__head"><div class="muted">Loading…</div></div></div>';
+  let r;
+  const sample = api(`/api/labs/${encodeURIComponent(id)}/sample`).catch(() => null);
+  try {
+    r = await api(`/api/labs/${encodeURIComponent(id)}/code`);
+    if (!r.ok) throw new Error(r.error);
+  } catch (e) {
+    dlg.innerHTML = `<div class="cv"><div class="cv__head"><div class="notice">${esc(e.message)}</div><button class="x" data-close="code" aria-label="Close">×</button></div></div>`;
+    return;
+  }
+  const plan = labPlan();
+  const pos = plan.findIndex((l) => l.id === id);
+  const prev = plan[pos - 1];
+  const next = plan[pos + 1];
+  const l = plan[pos] || {};
+  const same = (a, b) => (a || []).join('\n').trim() === (b || []).join('\n').trim();
+  const hasMine = r.parts.some((p) => p.current && !same(p.current, p.before) && !same(p.current, p.after));
+  const showMine = mine && hasMine;
+  const parts = r.parts
+    .map((p) => {
+      const left = showMine ? codeLines(p.current, p.headerLines, 'mine') : codeLines(p.before, p.headerLines, 'del');
+      const right = codeLines(p.after, p.headerLines, 'add');
+      return `<div class="cv__file">${esc(p.file)}</div>
+        <div class="cv__cols">
+          <section><h4>${showMine ? 'Your file now' : 'Before'} <small>${showMine ? 'what you wrote' : 'the starter'}</small></h4><div class="code">${left.join('')}</div></section>
+          <section><h4>After <small>reference solution</small></h4><div class="code">${right.join('')}</div></section>
+        </div>`;
+    })
+    .join('');
+  const stateChip = { done: '<span class="chip chip--ok">Done</span>', pending: '<span class="chip chip--wait">Rebuilding…</span>', current: '<span class="chip chip--todo">Next</span>', locked: '<span class="chip chip--lock">Locked</span>' }[l.state] || '';
+  const canSolve = S.status?.solver && l.state === 'current';
+  dlg.innerHTML = `<div class="cv">
+    <div class="cv__head">
+      <span class="cv__id">${esc(r.id)}</span>
+      <div class="cv__title"><small>${esc(GROUPS[l.version] || '')} ${stateChip}</small><h3>${esc(r.title)}</h3><p>${esc(r.hint)}</p></div>
+      <button class="x" data-close="code" aria-label="Close">×</button>
+    </div>
+    ${hasMine ? `<div class="cv__toggle" role="group" aria-label="Compare"><button class="${showMine ? '' : 'on'}" data-code-mine="0">Starter → solution</button><button class="${showMine ? 'on' : ''}" data-code-mine="1">Your file → solution</button></div>` : ''}
+    <div class="cv__body">${parts}${sampleBlock(await sample, r.id, l.state)}</div>
+    <div class="cv__foot">
+      <button class="btn btn--ghost btn--sm" ${prev ? `data-lab-code="${esc(prev.id)}"` : 'disabled'} aria-label="Previous step">← ${prev ? esc(prev.id) : ''}</button>
+      ${canSolve ? `<button class="btn btn--blue btn--sm" data-lab-solve="${esc(r.id)}">${armed.has(`solve:${r.id}`) ? 'Click again to write the solution' : 'Solve it for me'}</button>` : `<span class="muted">${esc(r.where)}</span>`}
+      <button class="btn btn--ghost btn--sm" ${next ? `data-lab-code="${esc(next.id)}"` : 'disabled'} aria-label="Next step">${next ? esc(next.id) : ''} →</button>
+    </div>
+  </div>`;
+}
+
+function arm(key, rerender) {
+  if (armed.has(key)) {
+    armed.delete(key);
+    return true;
+  }
+  armed.add(key);
+  rerender();
+  setTimeout(() => {
+    if (armed.delete(key)) rerender();
+  }, 4000);
+  return false;
+}
+
+async function labAction(id, action, through = false) {
+  try {
+    const path = id === '*' ? '/api/labs/reset-all' : `/api/labs/${id}/${action}${through ? '?through=true' : ''}`;
+    const r = await api(path, { method: 'POST' });
+    if (!r.ok) return toast(r.error);
+    const what = action === 'solve' ? `Lab ${(r.solved || [id]).join(', ')} written to your code` : id === '*' ? 'Every lab is a to-do again' : `Lab ${id} is a to-do again`;
+    toast(`${what}. ${r.next}`);
+    await refreshStatus();
+    watchForRebuild();
+  } catch (e) {
+    toast(e.message);
+  }
+}
+
+// After a solve or reset, poll faster until the rebuilt app reports the change.
+let rebuildTimer = null;
+function watchForRebuild() {
+  clearInterval(rebuildTimer);
+  const until = Date.now() + 3 * 60_000;
+  rebuildTimer = setInterval(() => {
+    if (Date.now() > until) clearInterval(rebuildTimer);
+    refreshStatus();
+  }, 2000);
+}
+
+function rerenderLabs() {
+  if (!$('#setupDrawer').hidden) renderSetup();
+  if ($('#codeModal').open && codeView.id) openCode(codeView.id, codeView.mine);
+  $$('.lab').forEach((card) => {
+    const slot = card.querySelector('.lab__solve');
+    if (slot) slot.innerHTML = solveButton(slot.dataset.lab);
+  });
 }
 
 // --- cards
@@ -537,7 +880,7 @@ const runAc = debounce(async (q) => {
     $('#acPanel').hidden = false;
     $('#searchInput').setAttribute('aria-expanded', 'true');
   } catch {
-    hideAc(); // Lab 2.5 is a stretch goal: no suggestions until it's written
+    hideAc(); // no suggestions until Lab 2.5 is written
   }
 }, 140);
 
@@ -618,6 +961,20 @@ function renderConciergeLock() {
   $('#llmBadge').classList.toggle('on', !!S.status?.llm);
 }
 
+function toggleConcierge(open = $('#concierge').hidden) {
+  const panel = $('#concierge');
+  panel.hidden = !open;
+  $('#conciergeFab').setAttribute('aria-expanded', String(open));
+  $('#conciergeFab').setAttribute('aria-label', open ? 'Close the concierge' : 'Ask the concierge');
+  if (open) {
+    $('#conciergeDot').hidden = true;
+    const log = $('#chatLog');
+    log.scrollTop = log.scrollHeight;
+    $('#aiInput').focus();
+  } else if (document.activeElement && panel.contains(document.activeElement)) $('#conciergeFab').focus();
+  store.set('conciergeOpen', open);
+}
+
 function formatAnswer(text) {
   return esc(text).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
 }
@@ -648,6 +1005,7 @@ async function ask(message) {
     const r = await api('/api/chat', { method: 'POST', body: { sessionId: S.session, message: message.trim() }, label: `concierge “${message.trim().slice(0, 40)}”` });
     S.chat.pop();
     S.chat.push({ role: 'assistant', content: r.answer, hotels: r.hotels, trace: r.trace });
+    if ($('#concierge').hidden) $('#conciergeDot').hidden = false;
   } catch (e) {
     S.chat.pop();
     if (e instanceof LabTodo) S.chat.push({ role: 'assistant', lab: e.lab });
@@ -738,8 +1096,6 @@ const dropArmed = new Set();
 
 async function renderSetup() {
   const st = S.status || {};
-  const labs = st.labs || [];
-  const byV = ['v1', 'v2', 'v3'].map((v) => [v, labs.filter((l) => l.version === v)]);
   const idxHtml = await Promise.all(
     Object.entries(INDEX_INFO).map(async ([name, info]) => {
       const i = idx(name);
@@ -759,7 +1115,7 @@ async function renderSetup() {
         </div>${def}</div>`;
     })
   );
-  $('#setupBody').innerHTML = `
+  $('#setupBody').innerHTML = `${labsBlock()}
     <div class="sblock"><h4>Your workspace</h4><div class="kv">
       <span>Attendee</span><b>${esc(st.attendee)}</b>
       <span>Database</span><b>${esc(st.database)}</b>
@@ -770,16 +1126,7 @@ async function renderSetup() {
       <span>LLM</span><b>${esc(st.llm || 'not configured')}</b>
     </div></div>
     <div class="sblock"><h4>Search indexes</h4>${idxHtml.join('')}</div>
-    <div class="sblock"><h4>Labs</h4>${byV
-      .map(
-        ([v, ls]) => `<ul class="labs">${ls
-          .map(
-            (l) => `<li class="${l.done ? 'done' : ''}"><b>${esc(l.id)}</b><div>${esc(l.title)}${l.stretch ? ' <span class="chip">stretch</span>' : ''}<small>${esc(l.where)}</small></div>
-          <span class="chip ${l.done ? 'chip--ok' : 'chip--todo'}">${l.done ? 'Done' : 'To do'}</span></li>`
-          )
-          .join('')}</ul>`
-      )
-      .join('')}</div>`;
+  `;
 }
 
 function openSetup() {
@@ -801,7 +1148,7 @@ function bind() {
 
   $$('.engine__btn, .vcard').forEach((b) => (b.onclick = () => setVersion(b.dataset.v)));
   document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-id],[data-city],[data-unset],[data-clear],[data-stars],[data-amenity],[data-close],[data-ladder-q],[data-try],[data-ai],[data-index-create],[data-index-def],[data-index-drop],[data-action]');
+    const t = e.target.closest('[data-id],[data-city],[data-unset],[data-clear],[data-stars],[data-amenity],[data-close],[data-ladder-q],[data-try],[data-ai],[data-index-create],[data-index-def],[data-index-drop],[data-action],[data-lab-solve],[data-lab-reset],[data-lab-through],[data-labs-reset-all],[data-index-create-all],[data-open-setup],[data-lab-code],[data-code-mine],[data-concierge]');
     if (!t) {
       if (!e.target.closest('#search')) hideAc();
       return;
@@ -825,7 +1172,7 @@ function bind() {
       S.amenities = S.amenities.includes(a) ? S.amenities.filter((x) => x !== a) : [...S.amenities, a];
       S.page = 0;
       load();
-    } else if (t.dataset.close === 'modal') $('#hotelModal').close();
+    } else if (t.dataset.close && t.closest('dialog')) t.closest('dialog').close(); // any × inside a dialog closes that dialog
     else if (t.dataset.close === 'setup') closeDrawers();
     else if (t.dataset.close === 'filters') closeDrawers();
     else if (t.dataset.close === 'inspector') $('#inspector').hidden = true;
@@ -835,6 +1182,7 @@ function bind() {
       doSearch(t.dataset.ladderQ);
     } else if (t.dataset.try) doSearch(t.dataset.try);
     else if (t.dataset.ai) ask(t.dataset.ai);
+    else if (t.dataset.concierge) toggleConcierge(t.dataset.concierge === 'toggle' ? undefined : false);
     else if (t.dataset.indexCreate) {
       t.disabled = true;
       api(`/api/indexes/${t.dataset.indexCreate}`, { method: 'POST', label: `create ${t.dataset.indexCreate}` })
@@ -842,6 +1190,29 @@ function bind() {
           logRequest({ label: `createSearchIndexes ${t.dataset.indexCreate}`, ms: 0, debug: [{ label: 'command', query: r.command }] });
           toast(r.ok ? `${t.dataset.indexCreate} requested. Building takes about a minute.` : r.error);
         })
+        .catch((err) => toast(err.message))
+        .finally(() => setTimeout(() => refreshStatus().then(renderSetup), 800));
+    } else if (t.dataset.labSolve) {
+      const id = t.dataset.labSolve;
+      if (arm(`solve:${id}`, rerenderLabs)) labAction(id, 'solve');
+    } else if (t.dataset.labReset) {
+      const id = t.dataset.labReset;
+      if (arm(`reset:${id}`, rerenderLabs)) labAction(id, 'reset');
+    } else if (t.dataset.labThrough) {
+      const id = t.dataset.labThrough;
+      if (arm(`through:${id}`, rerenderLabs)) labAction(id, 'solve', true);
+    } else if (t.dataset.labsResetAll !== undefined) {
+      if (arm('reset-all', rerenderLabs)) labAction('*', 'reset');
+    } else if (t.dataset.labCode) {
+      openCode(t.dataset.labCode);
+    } else if (t.dataset.codeMine !== undefined) {
+      openCode(codeView.id, t.dataset.codeMine === '1');
+    } else if (t.dataset.openSetup !== undefined) {
+      openSetup();
+    } else if (t.dataset.indexCreateAll) {
+      t.disabled = true;
+      Promise.all(t.dataset.indexCreateAll.split(',').map((n) => api(`/api/indexes/${n}`, { method: 'POST', label: `create ${n}` })))
+        .then((rs) => toast(rs.every((r) => r.ok) ? 'Indexes requested. They build in the background.' : rs.find((r) => !r.ok).error))
         .catch((err) => toast(err.message))
         .finally(() => setTimeout(() => refreshStatus().then(renderSetup), 800));
     } else if (t.dataset.indexDef) {
@@ -868,6 +1239,18 @@ function bind() {
 
   $('#hotelModal').addEventListener('click', (e) => {
     if (e.target === $('#hotelModal')) $('#hotelModal').close();
+  });
+  $('#codeModal').addEventListener('click', (e) => {
+    if (e.target === $('#codeModal')) $('#codeModal').close();
+  });
+  // ← → step through the labs while the code viewer is open
+  $('#codeModal').addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const target = $(`#codeModal .cv__foot [aria-label="${e.key === 'ArrowLeft' ? 'Previous step' : 'Next step'}"][data-lab-code]`);
+    if (target) {
+      e.preventDefault();
+      openCode(target.dataset.labCode);
+    }
   });
 
   $('#filters').addEventListener('change', (e) => {
@@ -928,6 +1311,7 @@ function bind() {
       input.focus();
     }
     if (e.key === 'Escape') {
+      if (!$('#concierge').hidden && $('#concierge').contains(document.activeElement)) return toggleConcierge(false);
       closeDrawers();
       $('#inspector').hidden = true;
     }
@@ -995,6 +1379,8 @@ async function init() {
   renderCats();
   load();
   loadHistory();
+  // A rebuild reloads the page: keep the concierge open if it was
+  if (store.get('conciergeOpen', false)) toggleConcierge(true);
   setInterval(refreshStatus, 6000);
 }
 

@@ -29,12 +29,16 @@ public final class ChatMemory {
     // LAB 4.3 ─────────────────────────────────────────────────────────────────────
     /** Store one message. {@code hotelIds} are the hotels an answer was based on (empty for user messages). */
     public void remember(String sessionId, String role, String content, List<String> hotelIds) {
+        // ▶ LAB 4.3
         throw Lab.todo("4.3");
+        // ◀ LAB 4.3
     }
 
     /** The last {@code lastN} messages of a session, oldest first. */
     public List<Document> recall(String sessionId, int lastN) {
+        // ▶ LAB 4.3
         throw Lab.todo("4.3");
+        // ◀ LAB 4.3
     }
 
     public long forget(String sessionId) {

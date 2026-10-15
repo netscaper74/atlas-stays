@@ -58,7 +58,9 @@ public final class Concierge {
      * previous answer stay in the context.
      */
     public List<Document> retrieve(String question, List<Document> history, Document filter, List<Document> debug) {
+        // ▶ LAB 4.1
         throw Lab.todo("4.1");
+        // ◀ LAB 4.1
     }
 
     // LAB 4.2 ─────────────────────────────────────────────────────────────────────
@@ -67,7 +69,9 @@ public final class Concierge {
      * CONTEXT block listing the retrieved hotels. (The system prompt is {@link #SYSTEM}.)
      */
     public List<Llm.Message> buildMessages(String question, List<Document> hotels, List<Document> history) {
+        // ▶ LAB 4.2
         throw Lab.todo("4.2");
+        // ◀ LAB 4.2
     }
 
     /** One hotel as a compact paragraph for the prompt. */

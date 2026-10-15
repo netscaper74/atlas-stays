@@ -58,7 +58,9 @@ public final class SemanticSearch implements HotelSearch {
      * keeping the best {@code limit}. Keep it well above limit (10 to 20 times).
      */
     public Document vectorSearchStage(String q, Document filter, int limit) {
+        // ▶ LAB 3.2
         throw Lab.todo("3.2");
+        // ◀ LAB 3.2
     }
 
     // LAB 3.3 ─────────────────────────────────────────────────────────────────────
@@ -68,17 +70,21 @@ public final class SemanticSearch implements HotelSearch {
      * Returns an empty document when there is nothing to filter.
      */
     public Document vectorFilter(SearchRequest r) {
+        // ▶ LAB 3.3
         throw Lab.todo("3.3");
+        // ◀ LAB 3.3
     }
 
-    // LAB 3.4 (stretch) ───────────────────────────────────────────────────────────
+    // LAB 3.4 ───────────────────────────────────────────────────────────────────
     /**
      * Hybrid search: run the vector search (meaning) and the Atlas Search query
      * (exact words, names, typos) side by side and merge the two ranked lists
      * with reciprocal rank fusion. Needs MongoDB 8.1 or later.
      */
     public List<Document> hybridPipeline(SearchRequest r, int limit) {
+        // ▶ LAB 3.4
         throw Lab.todo("3.4");
+        // ◀ LAB 3.4
     }
 
     // ───────────────────────────────────────────────────────────────── plumbing

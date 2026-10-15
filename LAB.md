@@ -4,7 +4,7 @@ Four labs and about 2 hours of hands-on time. Each exercise is one small method 
 
 **After each change:** with `docker compose watch` running, just save the file: the image rebuilds and the app restarts (usually under a minute); reload the page. With Maven, stop the app (`Ctrl+C`), run `mvn -q compile exec:java` again, and reload. `mvn test` checks every exercise without a database.
 
-**Stuck?** `git diff main solution -- <file>` shows the answer for one file. `git checkout solution -- <file>` takes it.
+**Follow the steps in Setup.** The **Setup** panel (top right, with your progress) opens on **Lab steps**: a **Next step** card with the exercise to do now, where to write it and a hint. Exercises go in order; later ones stay **Locked** until the earlier ones have code. Stuck or short on time? **Solve it for me** (click twice) writes the reference solution between the exercise's markers in your file so you can read it; with `docker compose watch` the app rebuilds by itself, with Maven restart it. Want to see the change first? **Before / after** (on the Next step card and on every step) shows the method as the starter has it next to the reference solution, and next to your own file once you've written something; Under the code, **Generated query** runs the method on a sample input (for example `textOperator("bosphorus vew")`) and shows the MongoDB query it builds: the reference solution's on the right, your running app's on the left, with a chip that says whether they match. For 4.1 and 4.3, which talk to the database, it shows the `aggregate`, `find` and `insertOne` calls your code makes. ← → steps through the labs. Arrived late? Hover a locked exercise and use **Catch up to here**: it solves every required step before it, in order. **Done → Undo** works newest first and puts the `throw Lab.todo(...)` back (it replaces whatever is between the markers). On the command line, `git diff main solution -- <file>` shows the answer for one file.
 
 ---
 
@@ -13,7 +13,7 @@ Four labs and about 2 hours of hands-on time. Each exercise is one small method 
 1. `cp .env.example .env`, then paste your `MONGODB_URI` and set `ATTENDEE` to the name your instructor used (for example `ayse_yilmaz`).
 2. `docker compose watch` (or `mvn -q compile exec:java`), then open http://localhost:8080. The first Docker build downloads Maven and the driver, so give it a couple of minutes.
 3. Wait for the status card to disappear. The app has loaded 255 hotels into **your** database, `stays_<ATTENDEE>`.
-4. **Create both search indexes now.** Open **Setup**, then click **Create index** on `hotels_search` and `hotels_vector`. They build in the background: the vector index has to embed every hotel, so starting it now means it is READY by Lab 3. You'll read both definitions later.
+4. **Create both search indexes now.** Open **Setup**: step 0 is **Create both indexes**. They build in the background: the vector index has to embed every hotel, so starting it now means it is READY by Lab 3. You'll read both definitions later.
 5. Open the **Atlas** button (bottom right). Every query the page runs appears there.
 
 Before you go on, look at one hotel document in Atlas Data Explorer or Compass. Note the `profile` field: it's the text the vector index will embed.
@@ -50,7 +50,7 @@ Scroll down to **The query ladder** and click **Run the ladder**. The v1 column 
 
 ---
 
-## Lab 2 · v2, Atlas Search (45 min)
+## Lab 2 · v2, Atlas Search (50 min)
 
 File: `search/AtlasTextSearch.java`. Index: `src/main/resources/indexes/hotels_search.json`
 
@@ -87,14 +87,14 @@ Return a `compound` with several `should` clauses, each boosted differently:
 
 > The plumbing runs one `$searchMeta` per facet group, each without its own filter (disjunctive faceting), so picking *Istanbul* still shows how many hotels Antalya has. Look at it in the Inspector.
 
-### 2.5 Stretch: search-as-you-type, `autocompletePipeline(String q)`
+### 2.5 Search-as-you-type: `autocompletePipeline(String q)`
 `$search` with the `autocomplete` operator on `name` (fuzzy `maxEdits` 1), `$limit` 6, `$project` a few fields. Type `kadi` in the header.
 
 **Check:** rerun the ladder. Rungs 2 to 4 should now pass. Then try `quiet place to work remotely with fast wifi`, and look at which words matched.
 
 ---
 
-## Lab 3 · v3, Vector Search with automated embedding (25 min)
+## Lab 3 · v3, Vector Search with automated embedding (30 min)
 
 File: `search/SemanticSearch.java`. Index: `src/main/resources/indexes/hotels_vector.json`
 
@@ -126,16 +126,18 @@ Now try, in v3:
 * `travelling with kids and a dog`
 * open any hotel: **Similar stays** uses the hotel's own profile as the query
 
-### 3.4 Stretch: hybrid, `hybridPipeline(SearchRequest r, int limit)`
+### 3.4 Hybrid search: `hybridPipeline(SearchRequest r, int limit)`
 `$rankFusion` with two input pipelines, `vector` (your `$vectorSearch`) and `text` (`$search` with `text.operator(r)`), merged by reciprocal rank fusion. Turn on **Hybrid** above the results. Each card then shows which pipeline found it.
 
 **Check:** run the ladder again, and compare all three on one question with **Compare all three**.
 
 ---
 
-## Lab 4 · The concierge: RAG with memory (35 min)
+## Lab 4 · The concierge: RAG with memory (30 min)
 
 Files: `rag/Concierge.java`, `rag/ChatMemory.java`
+
+The concierge opens from the **bell button in the bottom-left corner** of the app; it stays there while you scroll. A red dot means an answer arrived while the chat was closed.
 
 ```
 question ─▶ recall history ─▶ retrieve ($vectorSearch) ─▶ build prompt ─▶ LLM ─▶ remember
