@@ -31,6 +31,11 @@ public record SearchRequest(
         return new SearchRequest(q, city, type, minPrice, maxPrice, minStars, amenities, sort, page, newSize, hybrid);
     }
 
+    /** The same filters without the text: what the side panel selects. */
+    public SearchRequest withoutText() {
+        return new SearchRequest(null, city, type, minPrice, maxPrice, minStars, amenities, sort, page, size, hybrid);
+    }
+
     public SearchRequest withoutCity() {
         return new SearchRequest(q, null, type, minPrice, maxPrice, minStars, amenities, sort, page, size, hybrid);
     }

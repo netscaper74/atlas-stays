@@ -10,7 +10,7 @@ public final class SearchResult {
     public final String version;
     public final List<Document> items = new ArrayList<>();
     public long total;
-    /** Facet buckets per group, or null when the version can't count (v1, v3). */
+    /** Facet buckets per group ($searchMeta in v2 and v3), or null when there are none (v1, or LAB 2.4 not done). */
     public Document facets;
     /** Exact queries and pipelines that ran, for the Atlas Inspector. */
     public final List<Document> debug = new ArrayList<>();

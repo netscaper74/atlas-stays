@@ -13,6 +13,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * v3 · Atlas Vector Search with Automated Embedding (Voyage AI).
@@ -95,6 +96,7 @@ public final class SemanticSearch implements HotelSearch {
         SearchResult out = new SearchResult(version());
         String note = indexes.readinessNote(INDEX);
         if (note != null) out.notes.add(note);
+        CompletableFuture<Document> facets = facets(r, out);
 
         if (!r.hasText()) {
             // Nothing to embed: a vector search needs a query. Show the filtered list by rating.
@@ -103,6 +105,7 @@ public final class SemanticSearch implements HotelSearch {
                     .skip(r.page() * r.size()).limit(r.size()).into(out.items);
             out.total = db.hotels().countDocuments(filter);
             out.debug.add(Json.debug("find() (no text to embed)", new Document("filter", filter)));
+            attach(facets, out);
             out.ms = System.currentTimeMillis() - t0;
             return out;
         }
@@ -123,8 +126,30 @@ public final class SemanticSearch implements HotelSearch {
         }
         out.total = out.items.size() + (long) r.page() * r.size();
         if (r.sort() != null && !r.sort().isEmpty()) out.notes.add("Sorted after retrieval: the vector search picked the " + limit + " closest hotels first.");
+        attach(facets, out);
         out.ms = System.currentTimeMillis() - t0;
         return out;
+    }
+
+    /**
+     * The side panel's counts. A vector search ranks every hotel by closeness, so there is
+     * no "match set" to count. What we can count is the pool the pre-filter leaves for it
+     * to choose from: Atlas Search $searchMeta over the same filters, without the text.
+     */
+    private CompletableFuture<Document> facets(SearchRequest r, SearchResult out) {
+        if (text == null || indexes.readinessNote(Config.SEARCH_INDEX) != null) return CompletableFuture.completedFuture(null);
+        // Runs on another thread: report a failure as a value, and add the note when joining.
+        return text.facetCounts(r.withoutText(), out.debug, out.notes).exceptionally(e -> {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            return new Document("error", "No facet counts: " + Config.SEARCH_INDEX + " didn't answer (" + cause.getMessage() + ").");
+        });
+    }
+
+    private static void attach(CompletableFuture<Document> facets, SearchResult out) {
+        Document counted = facets.join();
+        if (counted == null) return;
+        if (counted.containsKey("error")) out.notes.add(counted.getString("error"));
+        else out.facets = counted.get("facets", Document.class);
     }
 
     private void hybrid(SearchRequest r, int limit, SearchResult out) {

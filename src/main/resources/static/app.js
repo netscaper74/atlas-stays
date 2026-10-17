@@ -769,7 +769,7 @@ function renderCats() {
 const FILTER_NOTES = {
   v1: 'Plain MQL in find(). There are no counts: counting per value needs Atlas Search facets.',
   v2: 'Counts come from $searchMeta facets. Each group is counted without its own selection.',
-  v3: 'Filters run inside $vectorSearch as a pre-filter, before the nearest neighbours are picked.',
+  v3: 'Filters run inside $vectorSearch as a pre-filter. Counts come from Atlas Search ($searchMeta) on the same filters: how many stays the vector search can choose from.',
 };
 
 function renderFilters() {
@@ -794,7 +794,7 @@ function renderFilters() {
     .map(([k, label]) => `<button type="button" class="${S.stars === k ? 'on' : ''}" data-stars="${k ?? ''}" title="${f && k ? `${starsAtLeast(k)} stays` : ''}">${label}${k ? '★' : ''}</button>`)
     .join('');
 
-  // price histogram from the facet buckets (v2 only)
+  // price histogram from the facet buckets (v2 and v3)
   const pb = f?.price || [];
   const max = Math.max(1, ...pb.map((b) => b.count));
   const hist = pb.length

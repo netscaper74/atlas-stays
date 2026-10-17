@@ -87,6 +87,8 @@ Return a `compound` with several `should` clauses, each boosted differently:
 
 > The plumbing runs one `$searchMeta` per facet group, each without its own filter (disjunctive faceting), so picking *Istanbul* still shows how many hotels Antalya has. Look at it in the Inspector.
 
+> v3 reuses these facets. A vector search ranks every hotel, so there is no match set to count; instead the counts show how many stays the pre-filter leaves for `$vectorSearch` to choose from (the same filters, without the text). Atlas Search counts, Vector Search ranks.
+
 ### 2.5 Search-as-you-type: `autocompletePipeline(String q)`
 `$search` with the `autocomplete` operator on `name` (fuzzy `maxEdits` 1), `$limit` 6, `$project` a few fields. Type `kadi` in the header.
 

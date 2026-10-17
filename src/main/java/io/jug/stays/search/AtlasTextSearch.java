@@ -129,15 +129,33 @@ public final class AtlasTextSearch implements HotelSearch {
                 () -> db.hotels().aggregate(pipeline).into(new ArrayList<>()), pool);
         out.debug.add(Json.debug("Results ($search)", pipeline));
 
-        // Facet counts. "Disjunctive" faceting: each group is counted with every filter
-        // except its own, so picking Istanbul still shows how many hotels Antalya has.
+        CompletableFuture<Document> facets = facetCounts(r, out.debug, out.notes);
+        out.items.addAll(items.join());
+        Document counted = facets.join();
+        if (counted != null) {
+            out.facets = counted.get("facets", Document.class);
+            if (counted.get("total") instanceof Number n) out.total = n.longValue();
+        } else {
+            out.total = out.items.size() + (long) r.page() * r.size();
+        }
+        out.ms = System.currentTimeMillis() - t0;
+        return out;
+    }
+
+    /**
+     * Facet counts with $searchMeta, one query per group, run in parallel.
+     * "Disjunctive" faceting: each group is counted with every filter except its own,
+     * so picking Istanbul still shows how many hotels Antalya has.
+     * Completes with {facets, total}, or with null when LAB 2.3 / 2.4 isn't done yet
+     * (a note says so). v3 uses it too: Atlas Search counts, Vector Search ranks.
+     */
+    public CompletableFuture<Document> facetCounts(SearchRequest r, List<Document> debug, List<String> notes) {
         Map<String, Function<SearchRequest, SearchRequest>> groups = new LinkedHashMap<>();
         groups.put("city", SearchRequest::withoutCity);
         groups.put("type", SearchRequest::withoutType);
         groups.put("stars", SearchRequest::withoutStars);
         groups.put("price", SearchRequest::withoutPrice);
         groups.put("amenities", Function.identity());
-        Document facets = null;
         Map<String, CompletableFuture<Document>> metas = new LinkedHashMap<>();
         try {
             Document defs = facetDefinitions();
@@ -147,16 +165,15 @@ public final class AtlasTextSearch implements HotelSearch {
                                 .append("facets", new Document(g.getKey(), defs.get(g.getKey()))))
                         .append("count", new Document("type", "total"))));
                 metas.put(g.getKey(), CompletableFuture.supplyAsync(() -> db.hotels().aggregate(metaPipeline).first(), pool));
-                if (g.getKey().equals("amenities")) out.debug.add(Json.debug("Facets ($searchMeta), one per group", metaPipeline));
+                if (g.getKey().equals("amenities")) debug.add(Json.debug("Facets ($searchMeta), one per group", metaPipeline));
             }
         } catch (Lab.NotImplemented e) {
-            out.notes.add("Facet counts need LAB 2.4.");
-            metas.clear();
+            notes.add("Facet counts need LAB " + e.exercise.id() + ".");
+            return CompletableFuture.completedFuture(null);
         }
-
-        out.items.addAll(items.join());
-        if (!metas.isEmpty()) {
-            facets = new Document();
+        return CompletableFuture.allOf(metas.values().toArray(CompletableFuture[]::new)).thenApply(done -> {
+            Document facets = new Document();
+            Long total = null;
             for (var m : metas.entrySet()) {
                 Document meta = m.getValue().join();
                 if (meta == null) continue;
@@ -164,14 +181,10 @@ public final class AtlasTextSearch implements HotelSearch {
                 Document group = f == null ? null : f.get(m.getKey(), Document.class);
                 facets.append(m.getKey(), group == null ? List.of() : group.get("buckets"));
                 Document count = meta.get("count", Document.class);
-                if (m.getKey().equals("amenities") && count != null) out.total = ((Number) count.get("total")).longValue();
+                if (m.getKey().equals("amenities") && count != null) total = ((Number) count.get("total")).longValue();
             }
-        } else {
-            out.total = out.items.size() + (long) r.page() * r.size();
-        }
-        out.facets = facets;
-        out.ms = System.currentTimeMillis() - t0;
-        return out;
+            return new Document("facets", facets).append("total", total);
+        });
     }
 
     public Document autocomplete(String q) {

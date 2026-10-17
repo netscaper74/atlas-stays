@@ -46,12 +46,7 @@ public final class RegexSearch implements HotelSearch {
      */
     public Bson textFilter(String q) {
         // ▶ LAB 1.1
-        Pattern pattern = Pattern.compile(escapeRegex(q.trim()), Pattern.CASE_INSENSITIVE);
-        List<Bson> perField = new ArrayList<>();
-        for (String field : FIELDS) {
-            perField.add(Filters.regex(field, pattern));
-        }
-        return Filters.or(perField);
+        throw Lab.todo("1.1");
         // ◀ LAB 1.1
     }
 
@@ -59,14 +54,7 @@ public final class RegexSearch implements HotelSearch {
     /** The filters from the side panel, as plain MQL. Returns null when there are none. */
     public Bson structuredFilter(SearchRequest r) {
         // ▶ LAB 1.2
-        List<Bson> and = new ArrayList<>();
-        if (r.city() != null) and.add(Filters.eq("city", r.city()));
-        if (r.type() != null) and.add(Filters.eq("type", r.type()));
-        if (r.minPrice() != null) and.add(Filters.gte("pricePerNight", r.minPrice()));
-        if (r.maxPrice() != null) and.add(Filters.lte("pricePerNight", r.maxPrice()));
-        if (r.minStars() != null) and.add(Filters.gte("stars", r.minStars()));
-        if (!r.amenities().isEmpty()) and.add(Filters.all("amenities", r.amenities()));
-        return and.isEmpty() ? null : Filters.and(and);
+        throw Lab.todo("1.2");
         // ◀ LAB 1.2
     }
 
